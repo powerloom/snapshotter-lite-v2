@@ -18,6 +18,9 @@ services:
       - MAX_WRITE_RETRIES=$MAX_WRITE_RETRIES
       - MAX_CONCURRENT_WRITES=$MAX_CONCURRENT_WRITES
       - DATA_MARKET_IN_REQUEST=$DATA_MARKET_IN_REQUEST
+      - LOG_LEVEL=${LOG_LEVEL:-4}
+      - BOOTSTRAP_NODE_ADDR=$BOOTSTRAP_NODE_ADDR
+
     networks:
       - custom_network
     restart: on-failure:10

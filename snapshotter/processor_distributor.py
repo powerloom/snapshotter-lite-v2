@@ -198,6 +198,9 @@ class ProcessorDistributor:
             day=self._current_day,
         )
 
+        if settings.only_simulate_submissions:
+            epoch.epochId = 0
+
         preloader_tasks = {}
         preloader_results_dict = {}
         failed_preloaders = set()
