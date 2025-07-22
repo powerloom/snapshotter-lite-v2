@@ -21,6 +21,7 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-4}
       - BOOTSTRAP_NODE_ADDR=$BOOTSTRAP_NODE_ADDR
       - LOCAL_COLLECTOR_P2P_PORT=${LOCAL_COLLECTOR_P2P_PORT:-4001}
+      - RENDEZVOUS_POINT=${RENDEZVOUS_POINT:-powerloom-snapshot-sequencer-network}
 
     networks:
       - custom_network
