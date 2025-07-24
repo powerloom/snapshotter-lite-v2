@@ -7,6 +7,7 @@ services:
       - ${LOCAL_COLLECTOR_PORT}
     ports:
       - ${LOCAL_COLLECTOR_PORT}:${LOCAL_COLLECTOR_PORT}
+      - ${LOCAL_COLLECTOR_P2P_PORT}:${LOCAL_COLLECTOR_P2P_PORT}
     volumes:
       - ./shared-volume:/keys
     environment:
@@ -20,8 +21,9 @@ services:
       - DATA_MARKET_IN_REQUEST=$DATA_MARKET_IN_REQUEST
       - LOG_LEVEL=${LOG_LEVEL:-4}
       - BOOTSTRAP_NODE_ADDR=$BOOTSTRAP_NODE_ADDR
-      - LOCAL_COLLECTOR_P2P_PORT=${LOCAL_COLLECTOR_P2P_PORT:-4001}
+      - LOCAL_COLLECTOR_P2P_PORT=${LOCAL_COLLECTOR_P2P_PORT:-8001}
       - RENDEZVOUS_POINT=${RENDEZVOUS_POINT:-powerloom-snapshot-sequencer-network}
+      - LIBP2P_LOGGING=debug
 
     networks:
       - custom_network
