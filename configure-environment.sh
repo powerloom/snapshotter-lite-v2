@@ -83,8 +83,23 @@ update_or_append_var() {
     local target_file="$3"
 
     if grep -q "^${var_name}=" "$target_file"; then
-        local sed_safe_var_value=$(echo "$var_value" | sed -e 's/\\/\\\\/g' -e 's/&/\\&/g' -e 's/#/\\#/g')
-        sed -i".backup" "s#^${var_name}=.*#${var_name}=${sed_safe_var_value}#" "$target_file"
+        local existing_var_value=$(grep "^${var_name}=" "$target_file" | cut -d'=' -f2)
+        if [[ "$existing_var_value" == "<"* ]]; then
+            echo "🔍 Possible first time setup. Existing value for $var_name starts with <, replacing with default value: $var_value"
+            sed -i".backup" "s#^${var_name}=.*#${var_name}=${var_value}#" "$target_file"
+            return
+        fi
+        if [ "$var_name" == "CONNECTION_REFRESH_INTERVAL_SEC" ] || [ "$var_name" == "TELEGRAM_NOTIFICATION_COOLDOWN" ] || [ "$var_name" == "DATA_MARKET_CONTRACT" ]; then
+            echo "🔍 Skipping update for $var_name, using existing value: $existing_var_value"
+        else
+            if [ "$var_value" != "$existing_var_value" ]; then
+                echo "🔍 Overriding $var_name in $target_file with value: $var_value (existing value: $existing_var_value)"
+                local sed_safe_var_value=$(echo "$var_value" | sed -e 's/\\/\\\\/g' -e 's/&/\\&/g' -e 's/#/\\#/g')
+                sed -i".backup" "s#^${var_name}=.*#${var_name}=${sed_safe_var_value}#" "$target_file"
+            else
+                echo "🔍 No change for $var_name, existing value: $existing_var_value is the same as new value: $var_value"
+            fi
+        fi
     else
         if [ -s "$target_file" ] && [ "$(tail -c 1 "$target_file" | wc -l)" -eq 0 ]; then
             echo "" >> "$target_file"
@@ -125,7 +140,8 @@ detect_and_select_env_file() {
     if [ -n "$SELECTED_ENV_FILE" ]; then
         ENV_FILE_PATH="$SELECTED_ENV_FILE"
         echo "🟢 Using environment file: $ENV_FILE_PATH"
-        source "$ENV_FILE_PATH"
+        #Commenting out the following line as this immediately sources the env file and overrides the defaults
+        #source "$ENV_FILE_PATH"
         FILE_CONTAINS_OVERRIDES=$(grep "^OVERRIDE_DEFAULTS=" "$ENV_FILE_PATH" | cut -d'=' -f2 || echo "false")
     fi
 }
@@ -419,18 +435,18 @@ handle_existing_env_file() {
             fi
             export DATA_MARKET_CONTRACT="$uniswap_v2_dm_contract"
         fi
-  
-        echo "🔔 Ensuring $ENV_FILE_PATH reflects current script's global defaults for RPC, Connection Interval, and Telegram Cooldown."
-        update_or_append_var "POWERLOOM_RPC_URL" "$DEFAULT_POWERLOOM_RPC_URL" "$ENV_FILE_PATH"
-        export POWERLOOM_RPC_URL="$DEFAULT_POWERLOOM_RPC_URL"
-
-        update_or_append_var "CONNECTION_REFRESH_INTERVAL_SEC" "$DEFAULT_CONNECTION_REFRESH_INTERVAL_SEC" "$ENV_FILE_PATH"
-        export CONNECTION_REFRESH_INTERVAL_SEC="$DEFAULT_CONNECTION_REFRESH_INTERVAL_SEC"
-        
-        update_or_append_var "TELEGRAM_NOTIFICATION_COOLDOWN" "$DEFAULT_TELEGRAM_NOTIFICATION_COOLDOWN" "$ENV_FILE_PATH"
-        export TELEGRAM_NOTIFICATION_COOLDOWN="$DEFAULT_TELEGRAM_NOTIFICATION_COOLDOWN"
-        
-        update_or_append_var "OVERRIDE_DEFAULTS" "false" "$ENV_FILE_PATH"
+        #These are not needed as they are set in the update_common_config function
+        #echo "🔔 Ensuring $ENV_FILE_PATH reflects current script's global defaults for RPC, Connection Interval, and Telegram Cooldown."
+        #update_or_append_var "POWERLOOM_RPC_URL" "$DEFAULT_POWERLOOM_RPC_URL" "$ENV_FILE_PATH"
+        #export POWERLOOM_RPC_URL="$DEFAULT_POWERLOOM_RPC_URL"
+        #
+        #update_or_append_var "CONNECTION_REFRESH_INTERVAL_SEC" "$DEFAULT_CONNECTION_REFRESH_INTERVAL_SEC" #"$ENV_FILE_PATH"
+        #export CONNECTION_REFRESH_INTERVAL_SEC="$DEFAULT_CONNECTION_REFRESH_INTERVAL_SEC"
+        #
+        #update_or_append_var "TELEGRAM_NOTIFICATION_COOLDOWN" "$DEFAULT_TELEGRAM_NOTIFICATION_COOLDOWN" #"$ENV_FILE_PATH"
+        #export TELEGRAM_NOTIFICATION_COOLDOWN="$DEFAULT_TELEGRAM_NOTIFICATION_COOLDOWN"
+        #
+        #update_or_append_var "OVERRIDE_DEFAULTS" "false" "$ENV_FILE_PATH"
     fi
 
     update_common_config "$ENV_FILE_PATH"
