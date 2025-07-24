@@ -251,6 +251,57 @@ You will be prompted to choose whether you wish to change the previously configu
 
 Choose `y` or `n` depending on whether you wish to change them.
 
+#### Quick Devnet Setup
+
+The `build.sh` script provides a `--devnet` flag for quick devnet deployment without manual configuration prompts.
+
+To use this feature, run:
+```bash
+./build.sh --devnet
+```
+
+When the `--devnet` flag is used:
+1. The script automatically configures for devnet chain
+2. Uses devnet-specific defaults:
+   - Devnet RPC URL: `https://rpc-devnet.powerloom.dev`
+   - Devnet Protocol State Contract: `0x3B5A0FB70ef68B5dd677C7d614dFB89961f97401`
+   - Devnet Data Market Contracts (Uniswap V2 by default)
+3. Auto-selects existing devnet environment files (if multiple exist, uses the first one)
+4. Skips chain selection prompts for faster setup
+5. Sets `OVERRIDE_DEFAULTS=true` to preserve devnet configuration
+
+You can combine this with other flags:
+```bash
+./build.sh --devnet --skip-credential-update
+./build.sh --devnet --data-market-contract-number 1  # For Aave V3 on devnet
+```
+
+This is ideal for developers who frequently switch between mainnet and devnet environments.
+
+##### Supported Data Markets on Devnet
+
+The snapshotter lite node supports multiple data markets on devnet:
+
+1. **Uniswap V2** (Default)
+   - Contract: `0x8C3fDC3A281BbB8231c9c92712fE670eFA655e5f`
+   - Branch: `eth_uniswapv2-lite_v2`
+
+2. **Aave V3** 
+   - Contract: `0x4229Ad271d8b11f2AdBDe77099752a534470876b`
+   - Branch: `eth_aavev3_lite_v2`
+
+When running with the `--devnet` flag, you'll be prompted to select a data market. You can also specify it directly:
+
+```bash
+# For Aave V3 on devnet
+./build.sh --devnet --data-market-contract-number 1
+
+# For Uniswap V2 on devnet (default)
+./build.sh --devnet --data-market-contract-number 2
+```
+
+Each data market creates its own environment file (`.env-devnet-<DATAMARKET>-ETH`) to maintain separate configurations.
+
 #### Overriding Default .env Generation
 
 The `build.sh` script provides a mechanism to override the default generation of the `.env` file and customize various configuration parameters. This is useful when you need a specific setup that differs from the standard defaults or an existing `.env` configuration.
