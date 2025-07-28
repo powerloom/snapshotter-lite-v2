@@ -15,6 +15,7 @@ DEFAULT_SOURCE_CHAIN="ETH"
 DEFAULT_NAMESPACE="UNISWAPV2"
 DEFAULT_POWERLOOM_RPC_URL="https://rpc-v2.powerloom.network"
 DEFAULT_PROTOCOL_STATE_CONTRACT="0x000AA7d3a6a2556496f363B59e56D9aA1881548F"
+DEFAULT_DATA_MARKET_CONTRACT="0x21cb57C1f2352ad215a463DD867b838749CD3b8f"
 DEFAULT_SNAPSHOT_CONFIG_REPO_BRANCH="eth_uniswapv2-lite_v2"
 DEFAULT_SNAPSHOTTER_COMPUTE_REPO_BRANCH="eth_uniswapv2_lite_v2"
 DEFAULT_CONNECTION_REFRESH_INTERVAL_SEC=60
@@ -37,11 +38,11 @@ SOURCE_CHAIN="$DEFAULT_SOURCE_CHAIN"
 NAMESPACE="$DEFAULT_NAMESPACE"
 POWERLOOM_RPC_URL="$DEFAULT_POWERLOOM_RPC_URL"
 PROTOCOL_STATE_CONTRACT="$DEFAULT_PROTOCOL_STATE_CONTRACT"
+DATA_MARKET_CONTRACT="$DEFAULT_DATA_MARKET_CONTRACT"
 SNAPSHOT_CONFIG_REPO_BRANCH="$DEFAULT_SNAPSHOT_CONFIG_REPO_BRANCH"
 SNAPSHOTTER_COMPUTE_REPO_BRANCH="$DEFAULT_SNAPSHOTTER_COMPUTE_REPO_BRANCH"
 CONNECTION_REFRESH_INTERVAL_SEC="$DEFAULT_CONNECTION_REFRESH_INTERVAL_SEC"
 TELEGRAM_NOTIFICATION_COOLDOWN="$DEFAULT_TELEGRAM_NOTIFICATION_COOLDOWN"
-DATA_MARKET_CONTRACT=""
 
 # --- Global Variables ---
 ENV_FILE_PATH=""
@@ -85,19 +86,21 @@ update_or_append_var() {
     if grep -q "^${var_name}=" "$target_file"; then
         local existing_var_value=$(grep "^${var_name}=" "$target_file" | cut -d'=' -f2)
         if [[ "$existing_var_value" == "<"* ]]; then
-            echo "🔍 Possible first time setup. Existing value for $var_name starts with <, replacing with default value: $var_value"
+            #echo "🔍 Possible first time setup. Existing value for $var_name starts with <, replacing with default value: $var_value"
             sed -i".backup" "s#^${var_name}=.*#${var_name}=${var_value}#" "$target_file"
             return
         fi
-        if [ "$var_name" == "CONNECTION_REFRESH_INTERVAL_SEC" ] || [ "$var_name" == "TELEGRAM_NOTIFICATION_COOLDOWN" ] || [ "$var_name" == "DATA_MARKET_CONTRACT" ]; then
+        if [ "$OVERRIDE_DEFAULTS_SCRIPT_FLAG" != "true" ] && \
+           ([ "$var_name" == "CONNECTION_REFRESH_INTERVAL_SEC" ] || \
+            [ "$var_name" == "TELEGRAM_NOTIFICATION_COOLDOWN" ]); then
             echo "🔍 Skipping update for $var_name, using existing value: $existing_var_value"
         else
             if [ "$var_value" != "$existing_var_value" ]; then
                 echo "🔍 Overriding $var_name in $target_file with value: $var_value (existing value: $existing_var_value)"
                 local sed_safe_var_value=$(echo "$var_value" | sed -e 's/\\/\\\\/g' -e 's/&/\\&/g' -e 's/#/\\#/g')
                 sed -i".backup" "s#^${var_name}=.*#${var_name}=${sed_safe_var_value}#" "$target_file"
-            else
-                echo "🔍 No change for $var_name, existing value: $existing_var_value is the same as new value: $var_value"
+            #else
+            #    #echo "🔍 No change for $var_name, existing value: $existing_var_value is the same as new value: $var_value"
             fi
         fi
     else
@@ -114,9 +117,8 @@ detect_and_select_env_file() {
     if [ "$DEVNET_MODE" = "true" ]; then
         return
     fi
-    
-    local existing_env_files=( $(find . -maxdepth 1 -name ".env-*" -type f) )
-    
+    #ignore .env-devnet-* files
+    local existing_env_files=($(find . -maxdepth 1 -name ".env-*" -type f -not -name ".env-devnet-*"))
     local num_existing_env_files=${#existing_env_files[@]}
     
     if [ "$num_existing_env_files" -eq 1 ]; then
@@ -140,8 +142,6 @@ detect_and_select_env_file() {
     if [ -n "$SELECTED_ENV_FILE" ]; then
         ENV_FILE_PATH="$SELECTED_ENV_FILE"
         echo "🟢 Using environment file: $ENV_FILE_PATH"
-        #Commenting out the following line as this immediately sources the env file and overrides the defaults
-        #source "$ENV_FILE_PATH"
         FILE_CONTAINS_OVERRIDES=$(grep "^OVERRIDE_DEFAULTS=" "$ENV_FILE_PATH" | cut -d'=' -f2 || echo "false")
     fi
 }
@@ -346,6 +346,20 @@ handle_override_mode() {
         FILE_WAS_NEWLY_CREATED=true
     else
         echo "🟢 $ENV_FILE_PATH found. Will update it with override values."
+        
+        # Read existing values for CONNECTION_REFRESH_INTERVAL_SEC and TELEGRAM_NOTIFICATION_COOLDOWN
+        local existing_connection_refresh=$(grep "^CONNECTION_REFRESH_INTERVAL_SEC=" "$ENV_FILE_PATH" | cut -d'=' -f2 || echo "")
+        local existing_telegram_cooldown=$(grep "^TELEGRAM_NOTIFICATION_COOLDOWN=" "$ENV_FILE_PATH" | cut -d'=' -f2 || echo "")
+        
+        if [ -n "$existing_connection_refresh" ]; then
+            export CONNECTION_REFRESH_INTERVAL_SEC="$existing_connection_refresh"
+            echo "🔍 Using existing CONNECTION_REFRESH_INTERVAL_SEC: $existing_connection_refresh"
+        fi
+        
+        if [ -n "$existing_telegram_cooldown" ]; then
+            export TELEGRAM_NOTIFICATION_COOLDOWN="$existing_telegram_cooldown"
+            echo "🔍 Using existing TELEGRAM_NOTIFICATION_COOLDOWN: $existing_telegram_cooldown"
+        fi
     fi
  
     update_common_config "$ENV_FILE_PATH"
@@ -359,15 +373,15 @@ handle_devnet_mode() {
     echo "🔧 Devnet mode enabled via --devnet flag."
     
     # Use devnet defaults
-    export POWERLOOM_CHAIN="$DEFAULT_DEVNET_POWERLOOM_CHAIN"
-    export SOURCE_CHAIN="$DEFAULT_DEVNET_SOURCE_CHAIN"
-    export NAMESPACE="$DEFAULT_DEVNET_NAMESPACE"
-    export POWERLOOM_RPC_URL="$DEFAULT_DEVNET_POWERLOOM_RPC_URL"
-    export PROTOCOL_STATE_CONTRACT="$DEFAULT_DEVNET_PROTOCOL_STATE_CONTRACT"
-    export SNAPSHOT_CONFIG_REPO_BRANCH="$DEFAULT_DEVNET_SNAPSHOT_CONFIG_REPO_BRANCH"
-    export SNAPSHOTTER_COMPUTE_REPO_BRANCH="$DEFAULT_DEVNET_SNAPSHOTTER_COMPUTE_REPO_BRANCH"
-    export CONNECTION_REFRESH_INTERVAL_SEC="$DEFAULT_DEVNET_CONNECTION_REFRESH_INTERVAL_SEC"
-    export TELEGRAM_NOTIFICATION_COOLDOWN="$DEFAULT_DEVNET_TELEGRAM_NOTIFICATION_COOLDOWN"
+    POWERLOOM_CHAIN="$DEFAULT_DEVNET_POWERLOOM_CHAIN"
+    SOURCE_CHAIN="$DEFAULT_DEVNET_SOURCE_CHAIN"
+    NAMESPACE="$DEFAULT_DEVNET_NAMESPACE"
+    POWERLOOM_RPC_URL="$DEFAULT_DEVNET_POWERLOOM_RPC_URL"
+    PROTOCOL_STATE_CONTRACT="$DEFAULT_DEVNET_PROTOCOL_STATE_CONTRACT"
+    SNAPSHOT_CONFIG_REPO_BRANCH="$DEFAULT_DEVNET_SNAPSHOT_CONFIG_REPO_BRANCH"
+    SNAPSHOTTER_COMPUTE_REPO_BRANCH="$DEFAULT_DEVNET_SNAPSHOTTER_COMPUTE_REPO_BRANCH"
+    CONNECTION_REFRESH_INTERVAL_SEC="$DEFAULT_DEVNET_CONNECTION_REFRESH_INTERVAL_SEC"
+    TELEGRAM_NOTIFICATION_COOLDOWN="$DEFAULT_DEVNET_TELEGRAM_NOTIFICATION_COOLDOWN"
     
     # Use data market contract number if specified, otherwise default to Uniswap V2
     if [ -n "$DATA_MARKET_CONTRACT_NUMBER" ]; then
@@ -435,18 +449,6 @@ handle_existing_env_file() {
             fi
             export DATA_MARKET_CONTRACT="$uniswap_v2_dm_contract"
         fi
-        #These are not needed as they are set in the update_common_config function
-        #echo "🔔 Ensuring $ENV_FILE_PATH reflects current script's global defaults for RPC, Connection Interval, and Telegram Cooldown."
-        #update_or_append_var "POWERLOOM_RPC_URL" "$DEFAULT_POWERLOOM_RPC_URL" "$ENV_FILE_PATH"
-        #export POWERLOOM_RPC_URL="$DEFAULT_POWERLOOM_RPC_URL"
-        #
-        #update_or_append_var "CONNECTION_REFRESH_INTERVAL_SEC" "$DEFAULT_CONNECTION_REFRESH_INTERVAL_SEC" #"$ENV_FILE_PATH"
-        #export CONNECTION_REFRESH_INTERVAL_SEC="$DEFAULT_CONNECTION_REFRESH_INTERVAL_SEC"
-        #
-        #update_or_append_var "TELEGRAM_NOTIFICATION_COOLDOWN" "$DEFAULT_TELEGRAM_NOTIFICATION_COOLDOWN" #"$ENV_FILE_PATH"
-        #export TELEGRAM_NOTIFICATION_COOLDOWN="$DEFAULT_TELEGRAM_NOTIFICATION_COOLDOWN"
-        #
-        #update_or_append_var "OVERRIDE_DEFAULTS" "false" "$ENV_FILE_PATH"
     fi
 
     update_common_config "$ENV_FILE_PATH"
@@ -609,19 +611,20 @@ main() {
 
     # Parse command line arguments
     parse_arguments "$@"
-    
-    # Detect and select environment file
-    detect_and_select_env_file
-    
-    # Handle different configuration modes
-    if [ "$DEVNET_MODE" = "true" ]; then
-        handle_devnet_mode
-    elif [ "$OVERRIDE_DEFAULTS_SCRIPT_FLAG" = "true" ]; then
+
+    if [ "$OVERRIDE_DEFAULTS_SCRIPT_FLAG" = "true" ]; then
+        echo "🔔 OVERRIDE_DEFAULTS_SCRIPT_FLAG is true"
         handle_override_mode
-    elif [ -n "$ENV_FILE_PATH" ]; then
-        handle_existing_env_file
     else
-        create_new_default_env_file
+        detect_and_select_env_file
+
+        if [ "$DEVNET_MODE" = "true" ]; then
+            handle_devnet_mode
+        elif [ -n "$ENV_FILE_PATH" ]; then
+            handle_existing_env_file
+        else
+            create_new_default_env_file
+        fi
     fi
 
     # Handle credential updates
