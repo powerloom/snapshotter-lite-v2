@@ -96,8 +96,8 @@ update_or_append_var() {
                 echo "🔍 Overriding $var_name in $target_file with value: $var_value (existing value: $existing_var_value)"
                 local sed_safe_var_value=$(echo "$var_value" | sed -e 's/\\/\\\\/g' -e 's/&/\\&/g' -e 's/#/\\#/g')
                 sed -i".backup" "s#^${var_name}=.*#${var_name}=${sed_safe_var_value}#" "$target_file"
-            else
-                #echo "🔍 No change for $var_name, existing value: $existing_var_value is the same as new value: $var_value"
+            #else
+            #    #echo "🔍 No change for $var_name, existing value: $existing_var_value is the same as new value: $var_value"
             fi
         fi
     else
