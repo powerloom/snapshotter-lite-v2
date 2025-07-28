@@ -89,7 +89,10 @@ update_or_append_var() {
             sed -i".backup" "s#^${var_name}=.*#${var_name}=${var_value}#" "$target_file"
             return
         fi
-        if [ "$var_name" == "CONNECTION_REFRESH_INTERVAL_SEC" ] || [ "$var_name" == "TELEGRAM_NOTIFICATION_COOLDOWN" ] || [ "$var_name" == "DATA_MARKET_CONTRACT" ]; then
+        if [ "$OVERRIDE_DEFAULTS_SCRIPT_FLAG" != "true" ] && \
+           ([ "$var_name" == "CONNECTION_REFRESH_INTERVAL_SEC" ] || \
+            [ "$var_name" == "TELEGRAM_NOTIFICATION_COOLDOWN" ] || \
+            [ "$var_name" == "DATA_MARKET_CONTRACT" ]); then
             echo "🔍 Skipping update for $var_name, using existing value: $existing_var_value"
         else
             if [ "$var_value" != "$existing_var_value" ]; then
@@ -344,6 +347,20 @@ handle_override_mode() {
         FILE_WAS_NEWLY_CREATED=true
     else
         echo "🟢 $ENV_FILE_PATH found. Will update it with override values."
+        
+        # Read existing values for CONNECTION_REFRESH_INTERVAL_SEC and TELEGRAM_NOTIFICATION_COOLDOWN
+        local existing_connection_refresh=$(grep "^CONNECTION_REFRESH_INTERVAL_SEC=" "$ENV_FILE_PATH" | cut -d'=' -f2 || echo "")
+        local existing_telegram_cooldown=$(grep "^TELEGRAM_NOTIFICATION_COOLDOWN=" "$ENV_FILE_PATH" | cut -d'=' -f2 || echo "")
+        
+        if [ -n "$existing_connection_refresh" ]; then
+            export CONNECTION_REFRESH_INTERVAL_SEC="$existing_connection_refresh"
+            echo "🔍 Using existing CONNECTION_REFRESH_INTERVAL_SEC: $existing_connection_refresh"
+        fi
+        
+        if [ -n "$existing_telegram_cooldown" ]; then
+            export TELEGRAM_NOTIFICATION_COOLDOWN="$existing_telegram_cooldown"
+            echo "🔍 Using existing TELEGRAM_NOTIFICATION_COOLDOWN: $existing_telegram_cooldown"
+        fi
     fi
  
     update_common_config "$ENV_FILE_PATH"
@@ -595,19 +612,20 @@ main() {
 
     # Parse command line arguments
     parse_arguments "$@"
-    
-    # Detect and select environment file
-    detect_and_select_env_file
-    
-    # Handle different configuration modes
-    if [ "$DEVNET_MODE" = "true" ]; then
-        handle_devnet_mode
-    elif [ "$OVERRIDE_DEFAULTS_SCRIPT_FLAG" = "true" ]; then
+
+    if [ "$OVERRIDE_DEFAULTS_SCRIPT_FLAG" = "true" ]; then
+        echo "🔔 OVERRIDE_DEFAULTS_SCRIPT_FLAG is true"
         handle_override_mode
-    elif [ -n "$ENV_FILE_PATH" ]; then
-        handle_existing_env_file
     else
-        create_new_default_env_file
+        detect_and_select_env_file
+
+        if [ "$DEVNET_MODE" = "true" ]; then
+            handle_devnet_mode
+        elif [ -n "$ENV_FILE_PATH" ]; then
+            handle_existing_env_file
+        else
+            create_new_default_env_file
+        fi
     fi
 
     # Handle credential updates
