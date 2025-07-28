@@ -140,8 +140,6 @@ detect_and_select_env_file() {
     if [ -n "$SELECTED_ENV_FILE" ]; then
         ENV_FILE_PATH="$SELECTED_ENV_FILE"
         echo "🟢 Using environment file: $ENV_FILE_PATH"
-        #Commenting out the following line as this immediately sources the env file and overrides the defaults
-        #source "$ENV_FILE_PATH"
         FILE_CONTAINS_OVERRIDES=$(grep "^OVERRIDE_DEFAULTS=" "$ENV_FILE_PATH" | cut -d'=' -f2 || echo "false")
     fi
 }
