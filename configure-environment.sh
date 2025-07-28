@@ -117,9 +117,8 @@ detect_and_select_env_file() {
     if [ "$DEVNET_MODE" = "true" ]; then
         return
     fi
-    
-    local existing_env_files=( $(find . -maxdepth 1 -name ".env-*" -type f) )
-    
+    #ignore .env-devnet-* files
+    local existing_env_files=($(find . -maxdepth 1 -name ".env-*" -type f -not -name ".env-devnet-*"))
     local num_existing_env_files=${#existing_env_files[@]}
     
     if [ "$num_existing_env_files" -eq 1 ]; then
@@ -374,15 +373,15 @@ handle_devnet_mode() {
     echo "🔧 Devnet mode enabled via --devnet flag."
     
     # Use devnet defaults
-    export POWERLOOM_CHAIN="$DEFAULT_DEVNET_POWERLOOM_CHAIN"
-    export SOURCE_CHAIN="$DEFAULT_DEVNET_SOURCE_CHAIN"
-    export NAMESPACE="$DEFAULT_DEVNET_NAMESPACE"
-    export POWERLOOM_RPC_URL="$DEFAULT_DEVNET_POWERLOOM_RPC_URL"
-    export PROTOCOL_STATE_CONTRACT="$DEFAULT_DEVNET_PROTOCOL_STATE_CONTRACT"
-    export SNAPSHOT_CONFIG_REPO_BRANCH="$DEFAULT_DEVNET_SNAPSHOT_CONFIG_REPO_BRANCH"
-    export SNAPSHOTTER_COMPUTE_REPO_BRANCH="$DEFAULT_DEVNET_SNAPSHOTTER_COMPUTE_REPO_BRANCH"
-    export CONNECTION_REFRESH_INTERVAL_SEC="$DEFAULT_DEVNET_CONNECTION_REFRESH_INTERVAL_SEC"
-    export TELEGRAM_NOTIFICATION_COOLDOWN="$DEFAULT_DEVNET_TELEGRAM_NOTIFICATION_COOLDOWN"
+    POWERLOOM_CHAIN="$DEFAULT_DEVNET_POWERLOOM_CHAIN"
+    SOURCE_CHAIN="$DEFAULT_DEVNET_SOURCE_CHAIN"
+    NAMESPACE="$DEFAULT_DEVNET_NAMESPACE"
+    POWERLOOM_RPC_URL="$DEFAULT_DEVNET_POWERLOOM_RPC_URL"
+    PROTOCOL_STATE_CONTRACT="$DEFAULT_DEVNET_PROTOCOL_STATE_CONTRACT"
+    SNAPSHOT_CONFIG_REPO_BRANCH="$DEFAULT_DEVNET_SNAPSHOT_CONFIG_REPO_BRANCH"
+    SNAPSHOTTER_COMPUTE_REPO_BRANCH="$DEFAULT_DEVNET_SNAPSHOTTER_COMPUTE_REPO_BRANCH"
+    CONNECTION_REFRESH_INTERVAL_SEC="$DEFAULT_DEVNET_CONNECTION_REFRESH_INTERVAL_SEC"
+    TELEGRAM_NOTIFICATION_COOLDOWN="$DEFAULT_DEVNET_TELEGRAM_NOTIFICATION_COOLDOWN"
     
     # Use data market contract number if specified, otherwise default to Uniswap V2
     if [ -n "$DATA_MARKET_CONTRACT_NUMBER" ]; then
