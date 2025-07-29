@@ -74,7 +74,7 @@ final_cleanup_handler() {
     fi
 }
 
-trap 'handle_error $LINENO; final_cleanup_handler' ERR
+trap 'handle_error $LINENO' ERR
 trap final_cleanup_handler EXIT
 
 # Helper function to update a variable in a file or append it if it doesn't exist
