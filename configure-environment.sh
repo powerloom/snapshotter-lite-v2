@@ -77,6 +77,17 @@ final_cleanup_handler() {
 trap 'handle_error $LINENO' ERR
 trap final_cleanup_handler EXIT
 
+# Helper function to mask sensitive values for logging
+mask_sensitive_value() {
+    local name="$1"
+    local value="$2"
+    if [[ "$name" == "SIGNER_ACCOUNT_PRIVATE_KEY" ]] || [[ "$name" == "TELEGRAM_CHAT_ID" ]]; then
+        echo "<HIDDEN>"
+    else
+        echo "$value"
+    fi
+}
+
 # Helper function to update a variable in a file or append it if it doesn't exist
 update_or_append_var() {
     local var_name="$1"
@@ -93,20 +104,26 @@ update_or_append_var() {
         if [ "$OVERRIDE_DEFAULTS_SCRIPT_FLAG" != "true" ] && \
            ([ "$var_name" == "CONNECTION_REFRESH_INTERVAL_SEC" ] || \
             [ "$var_name" == "TELEGRAM_NOTIFICATION_COOLDOWN" ]); then
-            echo "🔍 Skipping update for $var_name, using existing value: $existing_var_value"
+            local masked_existing=$(mask_sensitive_value "$var_name" "$existing_var_value")
+            echo "🔍 Skipping update for $var_name, using existing value: $masked_existing"
         else
             if [ "$var_value" != "$existing_var_value" ]; then
-                echo "🔍 Overriding $var_name in $target_file with value: $var_value (existing value: $existing_var_value)"
+                local masked_new=$(mask_sensitive_value "$var_name" "$var_value")
+                local masked_existing=$(mask_sensitive_value "$var_name" "$existing_var_value")
+                echo "🔍 Overriding $var_name in $target_file with value: $masked_new (existing value: $masked_existing)"
                 local sed_safe_var_value=$(echo "$var_value" | sed -e 's/\\/\\\\/g' -e 's/&/\\&/g' -e 's/#/\\#/g')
                 sed -i".backup" "s#^${var_name}=.*#${var_name}=${sed_safe_var_value}#" "$target_file"
-            #else
-            #    #echo "🔍 No change for $var_name, existing value: $existing_var_value is the same as new value: $var_value"
+            # else
+            #     local masked_value=$(mask_sensitive_value "$var_name" "$var_value")
+            #     echo "🔍 No change for $var_name, existing value matches new value: $masked_value"
             fi
         fi
     else
         if [ -s "$target_file" ] && [ "$(tail -c 1 "$target_file" | wc -l)" -eq 0 ]; then
             echo "" >> "$target_file"
         fi
+        local masked_value=$(mask_sensitive_value "$var_name" "$var_value")
+        echo "🔍 Adding new variable $var_name to $target_file with value: $masked_value"
         echo "${var_name}=${var_value}" >> "$target_file"
     fi
 }
