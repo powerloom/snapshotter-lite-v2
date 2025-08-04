@@ -9,40 +9,58 @@ NO_COLLECTOR=false
 OVERRIDE_DEFAULTS_SCRIPT_FLAG=false
 DEVNET_MODE=false
 
-# --- Define Top-Level Fixed Defaults ---
-DEFAULT_POWERLOOM_CHAIN="mainnet"
-DEFAULT_SOURCE_CHAIN="ETH"
-DEFAULT_NAMESPACE="UNISWAPV2"
-DEFAULT_POWERLOOM_RPC_URL="https://rpc-v2.powerloom.network"
-DEFAULT_PROTOCOL_STATE_CONTRACT="0x000AA7d3a6a2556496f363B59e56D9aA1881548F"
-DEFAULT_DATA_MARKET_CONTRACT="0x21cb57C1f2352ad215a463DD867b838749CD3b8f"
-DEFAULT_SNAPSHOT_CONFIG_REPO_BRANCH="eth_uniswapv2-lite_v2"
-DEFAULT_SNAPSHOTTER_COMPUTE_REPO_BRANCH="eth_uniswapv2_lite_v2"
-DEFAULT_CONNECTION_REFRESH_INTERVAL_SEC=60
-DEFAULT_TELEGRAM_NOTIFICATION_COOLDOWN=300
+# GitHub configuration URL
+MARKETS_CONFIG_URL="https://raw.githubusercontent.com/powerloom/curated-datamarkets/main/sources.json"
 
-# --- Define Top-Level Fixed Defaults for Devnet ---
-DEFAULT_DEVNET_POWERLOOM_CHAIN="devnet"
-DEFAULT_DEVNET_SOURCE_CHAIN="ETH"
-DEFAULT_DEVNET_NAMESPACE="UNISWAPV2"
-DEFAULT_DEVNET_POWERLOOM_RPC_URL="https://rpc-devnet.powerloom.dev"
-DEFAULT_DEVNET_PROTOCOL_STATE_CONTRACT="0x3B5A0FB70ef68B5dd677C7d614dFB89961f97401"
-DEFAULT_DEVNET_SNAPSHOT_CONFIG_REPO_BRANCH="eth_uniswapv2-lite_v2"
-DEFAULT_DEVNET_SNAPSHOTTER_COMPUTE_REPO_BRANCH="eth_uniswapv2_lite_v2"
-DEFAULT_DEVNET_CONNECTION_REFRESH_INTERVAL_SEC=60
-DEFAULT_DEVNET_TELEGRAM_NOTIFICATION_COOLDOWN=300
+# Fallback hardcoded defaults (used if GitHub fetch fails)
+FALLBACK_DEFAULT_POWERLOOM_CHAIN="mainnet"
+FALLBACK_DEFAULT_SOURCE_CHAIN="ETH"
+FALLBACK_DEFAULT_NAMESPACE="UNISWAPV2"
+FALLBACK_DEFAULT_POWERLOOM_RPC_URL="https://rpc-v2.powerloom.network"
+FALLBACK_DEFAULT_PROTOCOL_STATE_CONTRACT="0x000AA7d3a6a2556496f363B59e56D9aA1881548F"
+FALLBACK_DEFAULT_DATA_MARKET_CONTRACT="0x21cb57C1f2352ad215a463DD867b838749CD3b8f"
+FALLBACK_DEFAULT_SNAPSHOT_CONFIG_REPO_BRANCH="eth_uniswapv2-lite_v2"
+FALLBACK_DEFAULT_SNAPSHOTTER_COMPUTE_REPO_BRANCH="eth_uniswapv2_lite_v2"
+FALLBACK_DEFAULT_CONNECTION_REFRESH_INTERVAL_SEC=60
+FALLBACK_DEFAULT_TELEGRAM_NOTIFICATION_COOLDOWN=300
 
-# --- Initialize Working Configuration Variables from Fixed Defaults ---
-POWERLOOM_CHAIN="$DEFAULT_POWERLOOM_CHAIN"
-SOURCE_CHAIN="$DEFAULT_SOURCE_CHAIN"
-NAMESPACE="$DEFAULT_NAMESPACE"
-POWERLOOM_RPC_URL="$DEFAULT_POWERLOOM_RPC_URL"
-PROTOCOL_STATE_CONTRACT="$DEFAULT_PROTOCOL_STATE_CONTRACT"
-DATA_MARKET_CONTRACT="$DEFAULT_DATA_MARKET_CONTRACT"
-SNAPSHOT_CONFIG_REPO_BRANCH="$DEFAULT_SNAPSHOT_CONFIG_REPO_BRANCH"
-SNAPSHOTTER_COMPUTE_REPO_BRANCH="$DEFAULT_SNAPSHOTTER_COMPUTE_REPO_BRANCH"
-CONNECTION_REFRESH_INTERVAL_SEC="$DEFAULT_CONNECTION_REFRESH_INTERVAL_SEC"
-TELEGRAM_NOTIFICATION_COOLDOWN="$DEFAULT_TELEGRAM_NOTIFICATION_COOLDOWN"
+# Fallback hardcoded defaults for Devnet
+FALLBACK_DEFAULT_DEVNET_POWERLOOM_CHAIN="devnet"
+FALLBACK_DEFAULT_DEVNET_SOURCE_CHAIN="ETH"
+FALLBACK_DEFAULT_DEVNET_NAMESPACE="UNISWAPV2"
+FALLBACK_DEFAULT_DEVNET_POWERLOOM_RPC_URL="https://rpc-devnet.powerloom.dev"
+FALLBACK_DEFAULT_DEVNET_PROTOCOL_STATE_CONTRACT="0x3B5A0FB70ef68B5dd677C7d614dFB89961f97401"
+FALLBACK_DEFAULT_DEVNET_SNAPSHOT_CONFIG_REPO_BRANCH="eth_uniswapv2-lite_v2"
+FALLBACK_DEFAULT_DEVNET_SNAPSHOTTER_COMPUTE_REPO_BRANCH="eth_uniswapv2_lite_v2"
+FALLBACK_DEFAULT_DEVNET_CONNECTION_REFRESH_INTERVAL_SEC=60
+FALLBACK_DEFAULT_DEVNET_TELEGRAM_NOTIFICATION_COOLDOWN=300
+
+# Dynamic defaults (will be populated from GitHub API)
+DEFAULT_POWERLOOM_CHAIN=""
+DEFAULT_SOURCE_CHAIN=""
+DEFAULT_NAMESPACE=""
+DEFAULT_POWERLOOM_RPC_URL=""
+DEFAULT_PROTOCOL_STATE_CONTRACT=""
+DEFAULT_DATA_MARKET_CONTRACT=""
+DEFAULT_SNAPSHOT_CONFIG_REPO_BRANCH=""
+DEFAULT_SNAPSHOTTER_COMPUTE_REPO_BRANCH=""
+DEFAULT_CONNECTION_REFRESH_INTERVAL_SEC=""
+DEFAULT_TELEGRAM_NOTIFICATION_COOLDOWN=""
+
+DEFAULT_DEVNET_POWERLOOM_CHAIN=""
+DEFAULT_DEVNET_SOURCE_CHAIN=""
+DEFAULT_DEVNET_NAMESPACE=""
+DEFAULT_DEVNET_POWERLOOM_RPC_URL=""
+DEFAULT_DEVNET_PROTOCOL_STATE_CONTRACT=""
+DEFAULT_DEVNET_SNAPSHOT_CONFIG_REPO_BRANCH=""
+DEFAULT_DEVNET_SNAPSHOTTER_COMPUTE_REPO_BRANCH=""
+DEFAULT_DEVNET_CONNECTION_REFRESH_INTERVAL_SEC=""
+DEFAULT_DEVNET_TELEGRAM_NOTIFICATION_COOLDOWN=""
+
+# Global variables for storing fetched configuration
+MARKETS_CONFIG_JSON=""
+AVAILABLE_CHAINS=""
+AVAILABLE_MARKETS=""
 
 # --- Global Variables ---
 ENV_FILE_PATH=""
@@ -76,6 +94,288 @@ final_cleanup_handler() {
 
 trap 'handle_error $LINENO' ERR
 trap final_cleanup_handler EXIT
+
+# Function to safely parse configuration output into variables
+parse_config_vars() {
+    local config_output="$1"
+    
+    # Clear any existing temp variables
+    CHAIN_RPC_URL=""
+    DATA_MARKET_CONTRACT=""
+    PROTOCOL_STATE_CONTRACT=""
+    SNAPSHOT_CONFIG_BRANCH=""
+    SNAPSHOTTER_COMPUTE_BRANCH=""
+    SOURCE_CHAIN=""
+    
+    # Parse each line and set the appropriate variable
+    while IFS= read -r line; do
+        if [ -n "$line" ] && [[ "$line" == *"="* ]]; then
+            case "$line" in
+                CHAIN_RPC_URL=*)
+                    CHAIN_RPC_URL="${line#CHAIN_RPC_URL=}"
+                    ;;
+                DATA_MARKET_CONTRACT=*)
+                    DATA_MARKET_CONTRACT="${line#DATA_MARKET_CONTRACT=}"
+                    ;;
+                PROTOCOL_STATE_CONTRACT=*)
+                    PROTOCOL_STATE_CONTRACT="${line#PROTOCOL_STATE_CONTRACT=}"
+                    ;;
+                SNAPSHOT_CONFIG_BRANCH=*)
+                    SNAPSHOT_CONFIG_BRANCH="${line#SNAPSHOT_CONFIG_BRANCH=}"
+                    ;;
+                SNAPSHOTTER_COMPUTE_BRANCH=*)
+                    SNAPSHOTTER_COMPUTE_BRANCH="${line#SNAPSHOTTER_COMPUTE_BRANCH=}"
+                    ;;
+                SOURCE_CHAIN=*)
+                    SOURCE_CHAIN="${line#SOURCE_CHAIN=}"
+                    ;;
+            esac
+        fi
+    done <<< "$config_output"
+}
+
+# Function to extract value from JSON using shell tools
+# This is a simple JSON parser for our specific use case
+extract_json_value() {
+    local json="$1"
+    local key_path="$2"
+    
+    # Simple extraction for known patterns in our JSON structure
+    # This works for the specific structure of the markets config
+    echo "$json" | sed -n "s/.*\"$key_path\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" | head -1
+}
+
+# Function to find chain section in JSON
+find_chain_section() {
+    local json="$1"
+    local chain_name="$2"
+    
+    # Extract the specific chain object using awk
+    echo "$json" | awk -v chain="$chain_name" '
+    BEGIN { RS="}"; FS="\""; in_chain=0; chain_data="" }
+    {
+        if ($0 ~ "\"powerloomChain\"") {
+            for (i=1; i<=NF; i++) {
+                if ($i == "name" && $(i+2) == chain) {
+                    in_chain=1
+                    chain_data = $0
+                    # Continue reading until we get the complete chain object
+                    while ((getline) > 0) {
+                        chain_data = chain_data "}" $0
+                        if ($0 ~ /"dataMarkets".*\]/) break
+                    }
+                    print chain_data
+                    exit
+                }
+            }
+        }
+    }'
+}
+
+# Function to extract specific market from chain data
+extract_market_from_chain() {
+    local chain_data="$1"
+    local market_name="$2"
+    
+    # Extract market-specific configuration
+    echo "$chain_data" | awk -v market="$market_name" '
+    BEGIN { RS="{"; FS="\""; in_market=0 }
+    {
+        if ($0 ~ "\"name\"") {
+            for (i=1; i<=NF; i++) {
+                if ($i == "name" && $(i+2) == market) {
+                    in_market=1
+                    market_data = $0
+                    # Continue reading until we get the complete market object
+                    while ((getline) > 0 && $0 !~ /^[[:space:]]*}[[:space:]]*$/) {
+                        market_data = market_data "{" $0
+                    }
+                    print market_data
+                    exit
+                }
+            }
+        }
+    }'
+}
+
+# Function to fetch markets configuration from GitHub
+fetch_markets_config() {
+    echo "🌐 Fetching latest configuration from GitHub..."
+    
+    # Try to fetch the configuration with timeout
+    if command -v curl >/dev/null 2>&1; then
+        MARKETS_CONFIG_JSON=$(curl -s --connect-timeout 10 --max-time 30 "$MARKETS_CONFIG_URL" 2>/dev/null)
+    elif command -v wget >/dev/null 2>&1; then
+        MARKETS_CONFIG_JSON=$(wget -qO- --timeout=30 --connect-timeout=10 "$MARKETS_CONFIG_URL" 2>/dev/null)
+    else
+        echo "⚠️  Neither curl nor wget found. Using fallback configuration."
+        return 1
+    fi
+    
+    # Basic check if we got something that looks like JSON
+    if [ -z "$MARKETS_CONFIG_JSON" ] || ! echo "$MARKETS_CONFIG_JSON" | grep -q "powerloomChain"; then
+        echo "⚠️  Failed to fetch or parse configuration from GitHub. Using fallback configuration."
+        return 1
+    fi
+    
+    echo "✅ Successfully fetched configuration from GitHub."
+    return 0
+}
+
+# Function to extract chain configuration from JSON using shell tools
+extract_chain_config() {
+    local chain_name="$1"
+    local market_name="$2"
+    
+    if [ -z "$MARKETS_CONFIG_JSON" ]; then
+        return 1
+    fi
+    
+    # Find the chain section
+    local chain_section=$(find_chain_section "$MARKETS_CONFIG_JSON" "$chain_name")
+    if [ -z "$chain_section" ]; then
+        return 1
+    fi
+    
+    # Extract basic chain configuration
+    local rpc_url=$(echo "$chain_section" | sed -n 's/.*"rpcURL"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+    
+    # Find the market within the chain
+    local market_section=$(extract_market_from_chain "$chain_section" "$market_name")
+    if [ -n "$market_section" ]; then
+        # Extract market-specific values
+        local contract_addr=$(echo "$market_section" | sed -n 's/.*"contractAddress"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+        local protocol_state=$(echo "$market_section" | sed -n 's/.*"powerloomProtocolStateContractAddress"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+        local config_branch=$(echo "$market_section" | grep -A3 '"config":' | grep '"branch":' | sed 's/.*"branch":[[:space:]]*"\([^"]*\)".*/\1/')
+        local compute_branch=$(echo "$market_section" | grep -A3 '"compute":' | grep '"branch":' | sed 's/.*"branch":[[:space:]]*"\([^"]*\)".*/\1/')
+        local source_chain=$(echo "$market_section" | sed -n 's/.*"sourceChain"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+        
+                 # Normalize SOURCE_CHAIN (e.g., "ETH-MAINNET" -> "ETH")
+         if [[ "$source_chain" == *"-"* ]]; then
+             source_chain="${source_chain%%-*}"
+         fi
+         
+         # Output in shell variable format
+         [ -n "$rpc_url" ] && echo "CHAIN_RPC_URL=$rpc_url"
+         [ -n "$contract_addr" ] && echo "DATA_MARKET_CONTRACT=$contract_addr"
+         [ -n "$protocol_state" ] && echo "PROTOCOL_STATE_CONTRACT=$protocol_state"
+         [ -n "$config_branch" ] && echo "SNAPSHOT_CONFIG_BRANCH=$config_branch"
+         [ -n "$compute_branch" ] && echo "SNAPSHOTTER_COMPUTE_BRANCH=$compute_branch"
+         [ -n "$source_chain" ] && echo "SOURCE_CHAIN=$source_chain"
+    else
+        # Just return chain RPC if market not found
+        [ -n "$rpc_url" ] && echo "CHAIN_RPC_URL=$rpc_url"
+    fi
+}
+
+# Function to initialize default configuration values
+initialize_default_config() {
+    local use_fallback=false
+    
+    # Try to fetch from GitHub first
+    if ! fetch_markets_config; then
+        use_fallback=true
+    fi
+    
+    if [ "$use_fallback" = "true" ]; then
+        echo "🔄 Using fallback configuration..."
+        # Use fallback values for mainnet
+        DEFAULT_POWERLOOM_CHAIN="$FALLBACK_DEFAULT_POWERLOOM_CHAIN"
+        DEFAULT_SOURCE_CHAIN="$FALLBACK_DEFAULT_SOURCE_CHAIN"
+        DEFAULT_NAMESPACE="$FALLBACK_DEFAULT_NAMESPACE"
+        DEFAULT_POWERLOOM_RPC_URL="$FALLBACK_DEFAULT_POWERLOOM_RPC_URL"
+        DEFAULT_PROTOCOL_STATE_CONTRACT="$FALLBACK_DEFAULT_PROTOCOL_STATE_CONTRACT"
+        DEFAULT_DATA_MARKET_CONTRACT="$FALLBACK_DEFAULT_DATA_MARKET_CONTRACT"
+        DEFAULT_SNAPSHOT_CONFIG_REPO_BRANCH="$FALLBACK_DEFAULT_SNAPSHOT_CONFIG_REPO_BRANCH"
+        DEFAULT_SNAPSHOTTER_COMPUTE_REPO_BRANCH="$FALLBACK_DEFAULT_SNAPSHOTTER_COMPUTE_REPO_BRANCH"
+        DEFAULT_CONNECTION_REFRESH_INTERVAL_SEC="$FALLBACK_DEFAULT_CONNECTION_REFRESH_INTERVAL_SEC"
+        DEFAULT_TELEGRAM_NOTIFICATION_COOLDOWN="$FALLBACK_DEFAULT_TELEGRAM_NOTIFICATION_COOLDOWN"
+        
+        # Use fallback values for devnet
+        DEFAULT_DEVNET_POWERLOOM_CHAIN="$FALLBACK_DEFAULT_DEVNET_POWERLOOM_CHAIN"
+        DEFAULT_DEVNET_SOURCE_CHAIN="$FALLBACK_DEFAULT_DEVNET_SOURCE_CHAIN"
+        DEFAULT_DEVNET_NAMESPACE="$FALLBACK_DEFAULT_DEVNET_NAMESPACE"
+        DEFAULT_DEVNET_POWERLOOM_RPC_URL="$FALLBACK_DEFAULT_DEVNET_POWERLOOM_RPC_URL"
+        DEFAULT_DEVNET_PROTOCOL_STATE_CONTRACT="$FALLBACK_DEFAULT_DEVNET_PROTOCOL_STATE_CONTRACT"
+        DEFAULT_DEVNET_SNAPSHOT_CONFIG_REPO_BRANCH="$FALLBACK_DEFAULT_DEVNET_SNAPSHOT_CONFIG_REPO_BRANCH"
+        DEFAULT_DEVNET_SNAPSHOTTER_COMPUTE_REPO_BRANCH="$FALLBACK_DEFAULT_DEVNET_SNAPSHOTTER_COMPUTE_REPO_BRANCH"
+        DEFAULT_DEVNET_CONNECTION_REFRESH_INTERVAL_SEC="$FALLBACK_DEFAULT_DEVNET_CONNECTION_REFRESH_INTERVAL_SEC"
+        DEFAULT_DEVNET_TELEGRAM_NOTIFICATION_COOLDOWN="$FALLBACK_DEFAULT_DEVNET_TELEGRAM_NOTIFICATION_COOLDOWN"
+    else
+        echo "🔧 Initializing configuration from GitHub data..."
+        
+        # Extract mainnet UNISWAPV2 as default
+        local mainnet_config=$(extract_chain_config "mainnet" "UNISWAPV2")
+        if [ -n "$mainnet_config" ]; then
+            parse_config_vars "$mainnet_config"
+            DEFAULT_POWERLOOM_CHAIN="mainnet"
+            DEFAULT_SOURCE_CHAIN="$SOURCE_CHAIN"
+            DEFAULT_NAMESPACE="UNISWAPV2"
+            DEFAULT_POWERLOOM_RPC_URL="$CHAIN_RPC_URL"
+            DEFAULT_PROTOCOL_STATE_CONTRACT="$PROTOCOL_STATE_CONTRACT"
+            DEFAULT_DATA_MARKET_CONTRACT="$DATA_MARKET_CONTRACT"
+            DEFAULT_SNAPSHOT_CONFIG_REPO_BRANCH="$SNAPSHOT_CONFIG_BRANCH"
+            DEFAULT_SNAPSHOTTER_COMPUTE_REPO_BRANCH="$SNAPSHOTTER_COMPUTE_BRANCH"
+            DEFAULT_CONNECTION_REFRESH_INTERVAL_SEC="$FALLBACK_DEFAULT_CONNECTION_REFRESH_INTERVAL_SEC"
+            DEFAULT_TELEGRAM_NOTIFICATION_COOLDOWN="$FALLBACK_DEFAULT_TELEGRAM_NOTIFICATION_COOLDOWN"
+        fi
+        
+        # Extract devnet UNISWAPV2 as default
+        local devnet_config=$(extract_chain_config "devnet" "UNISWAPV2")
+        if [ -n "$devnet_config" ]; then
+            parse_config_vars "$devnet_config"
+            DEFAULT_DEVNET_POWERLOOM_CHAIN="devnet"
+            DEFAULT_DEVNET_SOURCE_CHAIN="$SOURCE_CHAIN"
+            DEFAULT_DEVNET_NAMESPACE="UNISWAPV2"
+            DEFAULT_DEVNET_POWERLOOM_RPC_URL="$CHAIN_RPC_URL"
+            DEFAULT_DEVNET_PROTOCOL_STATE_CONTRACT="$PROTOCOL_STATE_CONTRACT"
+            DEFAULT_DEVNET_SNAPSHOT_CONFIG_REPO_BRANCH="$SNAPSHOT_CONFIG_BRANCH"
+            DEFAULT_DEVNET_SNAPSHOTTER_COMPUTE_REPO_BRANCH="$SNAPSHOTTER_COMPUTE_BRANCH"
+            DEFAULT_DEVNET_CONNECTION_REFRESH_INTERVAL_SEC="$FALLBACK_DEFAULT_DEVNET_CONNECTION_REFRESH_INTERVAL_SEC"
+            DEFAULT_DEVNET_TELEGRAM_NOTIFICATION_COOLDOWN="$FALLBACK_DEFAULT_DEVNET_TELEGRAM_NOTIFICATION_COOLDOWN"
+        fi
+        
+        # Fallback to hardcoded values if extraction failed
+        if [ -z "$DEFAULT_POWERLOOM_RPC_URL" ]; then
+            echo "⚠️  Failed to extract mainnet config. Using fallback values."
+            DEFAULT_POWERLOOM_CHAIN="$FALLBACK_DEFAULT_POWERLOOM_CHAIN"
+            DEFAULT_SOURCE_CHAIN="$FALLBACK_DEFAULT_SOURCE_CHAIN"
+            DEFAULT_NAMESPACE="$FALLBACK_DEFAULT_NAMESPACE"
+            DEFAULT_POWERLOOM_RPC_URL="$FALLBACK_DEFAULT_POWERLOOM_RPC_URL"
+            DEFAULT_PROTOCOL_STATE_CONTRACT="$FALLBACK_DEFAULT_PROTOCOL_STATE_CONTRACT"
+            DEFAULT_DATA_MARKET_CONTRACT="$FALLBACK_DEFAULT_DATA_MARKET_CONTRACT"
+            DEFAULT_SNAPSHOT_CONFIG_REPO_BRANCH="$FALLBACK_DEFAULT_SNAPSHOT_CONFIG_REPO_BRANCH"
+            DEFAULT_SNAPSHOTTER_COMPUTE_REPO_BRANCH="$FALLBACK_DEFAULT_SNAPSHOTTER_COMPUTE_REPO_BRANCH"
+            DEFAULT_CONNECTION_REFRESH_INTERVAL_SEC="$FALLBACK_DEFAULT_CONNECTION_REFRESH_INTERVAL_SEC"
+            DEFAULT_TELEGRAM_NOTIFICATION_COOLDOWN="$FALLBACK_DEFAULT_TELEGRAM_NOTIFICATION_COOLDOWN"
+        fi
+        
+        if [ -z "$DEFAULT_DEVNET_POWERLOOM_RPC_URL" ]; then
+            echo "⚠️  Failed to extract devnet config. Using fallback values."
+            DEFAULT_DEVNET_POWERLOOM_CHAIN="$FALLBACK_DEFAULT_DEVNET_POWERLOOM_CHAIN"
+            DEFAULT_DEVNET_SOURCE_CHAIN="$FALLBACK_DEFAULT_DEVNET_SOURCE_CHAIN"
+            DEFAULT_DEVNET_NAMESPACE="$FALLBACK_DEFAULT_DEVNET_NAMESPACE"
+            DEFAULT_DEVNET_POWERLOOM_RPC_URL="$FALLBACK_DEFAULT_DEVNET_POWERLOOM_RPC_URL"
+            DEFAULT_DEVNET_PROTOCOL_STATE_CONTRACT="$FALLBACK_DEFAULT_DEVNET_PROTOCOL_STATE_CONTRACT"
+            DEFAULT_DEVNET_SNAPSHOT_CONFIG_REPO_BRANCH="$FALLBACK_DEFAULT_DEVNET_SNAPSHOT_CONFIG_REPO_BRANCH"
+            DEFAULT_DEVNET_SNAPSHOTTER_COMPUTE_REPO_BRANCH="$FALLBACK_DEFAULT_DEVNET_SNAPSHOTTER_COMPUTE_REPO_BRANCH"
+            DEFAULT_DEVNET_CONNECTION_REFRESH_INTERVAL_SEC="$FALLBACK_DEFAULT_DEVNET_CONNECTION_REFRESH_INTERVAL_SEC"
+            DEFAULT_DEVNET_TELEGRAM_NOTIFICATION_COOLDOWN="$FALLBACK_DEFAULT_DEVNET_TELEGRAM_NOTIFICATION_COOLDOWN"
+        fi
+    fi
+    
+    # Initialize working configuration variables from defaults
+    POWERLOOM_CHAIN="$DEFAULT_POWERLOOM_CHAIN"
+    SOURCE_CHAIN="$DEFAULT_SOURCE_CHAIN"
+    NAMESPACE="$DEFAULT_NAMESPACE"
+    POWERLOOM_RPC_URL="$DEFAULT_POWERLOOM_RPC_URL"
+    PROTOCOL_STATE_CONTRACT="$DEFAULT_PROTOCOL_STATE_CONTRACT"
+    DATA_MARKET_CONTRACT="$DEFAULT_DATA_MARKET_CONTRACT"
+    SNAPSHOT_CONFIG_REPO_BRANCH="$DEFAULT_SNAPSHOT_CONFIG_REPO_BRANCH"
+    SNAPSHOTTER_COMPUTE_REPO_BRANCH="$DEFAULT_SNAPSHOTTER_COMPUTE_REPO_BRANCH"
+    CONNECTION_REFRESH_INTERVAL_SEC="$DEFAULT_CONNECTION_REFRESH_INTERVAL_SEC"
+    TELEGRAM_NOTIFICATION_COOLDOWN="$DEFAULT_TELEGRAM_NOTIFICATION_COOLDOWN"
+}
 
 # Helper function to mask sensitive values for logging
 mask_sensitive_value() {
@@ -198,41 +498,76 @@ parse_arguments() {
     done
 }
 
-# Function to get data market configuration
+# Function to get data market configuration dynamically
 get_data_market_config() {
     local choice="$1"
     local is_devnet="${2:-false}"
     
-    # Define contract addresses
-    local MAINNET_AAVEV3_CONTRACT="0x0000000000000000000000000000000000000000"
-    local MAINNET_UNISWAPV2_CONTRACT="0x21cb57C1f2352ad215a463DD867b838749CD3b8f"
-    local DEVNET_AAVEV3_CONTRACT="0x4229Ad271d8b11f2AdBDe77099752a534470876b"
-    local DEVNET_UNISWAPV2_CONTRACT="0x8C3fDC3A281BbB8231c9c92712fE670eFA655e5f"
+    local chain_name="mainnet"
+    if [ "$is_devnet" = "true" ]; then
+        chain_name="devnet"
+    fi
     
     case $choice in
         "1")
-            if [ "$is_devnet" = "true" ]; then
-                echo "Aave V3 selected for devnet"
-                export DATA_MARKET_CONTRACT="$DEVNET_AAVEV3_CONTRACT"
+            echo "Aave V3 selected for $chain_name"
+            local config_result=$(extract_chain_config "$chain_name" "AAVEV3")
+            if [ -n "$config_result" ]; then
+                parse_config_vars "$config_result"
+                export DATA_MARKET_CONTRACT="$DATA_MARKET_CONTRACT"
+                export SNAPSHOT_CONFIG_REPO_BRANCH="$SNAPSHOT_CONFIG_BRANCH"
+                export SNAPSHOTTER_COMPUTE_REPO_BRANCH="$SNAPSHOTTER_COMPUTE_BRANCH"
+                export NAMESPACE="AAVEV3"
+                export SOURCE_CHAIN="$SOURCE_CHAIN"
+                # Update protocol state contract if found
+                if [ -n "$PROTOCOL_STATE_CONTRACT" ]; then
+                    if [ "$is_devnet" = "true" ]; then
+                        DEFAULT_DEVNET_PROTOCOL_STATE_CONTRACT="$PROTOCOL_STATE_CONTRACT"
+                    else
+                        DEFAULT_PROTOCOL_STATE_CONTRACT="$PROTOCOL_STATE_CONTRACT"
+                    fi
+                fi
             else
-                echo "Aave V3 selected"
-                export DATA_MARKET_CONTRACT="$MAINNET_AAVEV3_CONTRACT"
+                echo "⚠️  Could not fetch AAVEV3 config from GitHub, using fallback values"
+                if [ "$is_devnet" = "true" ]; then
+                    export DATA_MARKET_CONTRACT="0x4229Ad271d8b11f2AdBDe77099752a534470876b"
+                else
+                    export DATA_MARKET_CONTRACT="0x0000000000000000000000000000000000000000"
+                fi
+                export SNAPSHOT_CONFIG_REPO_BRANCH="eth_aavev3_lite_v2"
+                export SNAPSHOTTER_COMPUTE_REPO_BRANCH="eth_aavev3_lite"
+                export NAMESPACE="AAVEV3"
             fi
-            export SNAPSHOT_CONFIG_REPO_BRANCH="eth_aavev3_lite_v2"
-            export SNAPSHOTTER_COMPUTE_REPO_BRANCH="eth_aavev3_lite"
-            export NAMESPACE="AAVEV3"
             ;;
         "2")
-            if [ "$is_devnet" = "true" ]; then
-                echo "Uniswap V2 selected for devnet"
-                export DATA_MARKET_CONTRACT="$DEVNET_UNISWAPV2_CONTRACT"
+            echo "Uniswap V2 selected for $chain_name"
+            local config_result=$(extract_chain_config "$chain_name" "UNISWAPV2")
+            if [ -n "$config_result" ]; then
+                parse_config_vars "$config_result"
+                export DATA_MARKET_CONTRACT="$DATA_MARKET_CONTRACT"
+                export SNAPSHOT_CONFIG_REPO_BRANCH="$SNAPSHOT_CONFIG_BRANCH"
+                export SNAPSHOTTER_COMPUTE_REPO_BRANCH="$SNAPSHOTTER_COMPUTE_BRANCH"
+                export NAMESPACE="UNISWAPV2"
+                export SOURCE_CHAIN="$SOURCE_CHAIN"
+                # Update protocol state contract if found
+                if [ -n "$PROTOCOL_STATE_CONTRACT" ]; then
+                    if [ "$is_devnet" = "true" ]; then
+                        DEFAULT_DEVNET_PROTOCOL_STATE_CONTRACT="$PROTOCOL_STATE_CONTRACT"
+                    else
+                        DEFAULT_PROTOCOL_STATE_CONTRACT="$PROTOCOL_STATE_CONTRACT"
+                    fi
+                fi
             else
-                echo "Uniswap V2 selected"
-                export DATA_MARKET_CONTRACT="$MAINNET_UNISWAPV2_CONTRACT"
+                echo "⚠️  Could not fetch UNISWAPV2 config from GitHub, using fallback values"
+                if [ "$is_devnet" = "true" ]; then
+                    export DATA_MARKET_CONTRACT="0x8C3fDC3A281BbB8231c9c92712fE670eFA655e5f"
+                else
+                    export DATA_MARKET_CONTRACT="0x21cb57C1f2352ad215a463DD867b838749CD3b8f"
+                fi
+                export SNAPSHOT_CONFIG_REPO_BRANCH="eth_uniswapv2-lite_v2"
+                export SNAPSHOTTER_COMPUTE_REPO_BRANCH="eth_uniswapv2_lite_v2"
+                export NAMESPACE="UNISWAPV2"
             fi
-            export SNAPSHOT_CONFIG_REPO_BRANCH="eth_uniswapv2-lite_v2"
-            export SNAPSHOTTER_COMPUTE_REPO_BRANCH="eth_uniswapv2_lite_v2"
-            export NAMESPACE="UNISWAPV2"
             ;;
         *)
             echo "❌ Invalid data market choice: $choice"
@@ -500,11 +835,15 @@ create_new_default_env_file() {
 
     get_data_market_config "$DATA_MARKET_CONTRACT_CHOICE"
 
-    # Export remaining defaults
+    # Export all required configuration variables
     export POWERLOOM_CHAIN
     export SOURCE_CHAIN
+    export NAMESPACE
     export POWERLOOM_RPC_URL
     export PROTOCOL_STATE_CONTRACT
+    export DATA_MARKET_CONTRACT
+    export SNAPSHOT_CONFIG_REPO_BRANCH
+    export SNAPSHOTTER_COMPUTE_REPO_BRANCH
     export CONNECTION_REFRESH_INTERVAL_SEC
     export TELEGRAM_NOTIFICATION_COOLDOWN
 
@@ -633,6 +972,9 @@ main() {
         exit 1
     fi
 
+    # Initialize configuration from GitHub or fallback
+    initialize_default_config
+
     # Parse command line arguments
     parse_arguments "$@"
 
@@ -654,15 +996,17 @@ main() {
     # Handle credential updates
     handle_credential_updates
     
-    # Final source and setup
+    # Final validation
     if [ ! -f "$ENV_FILE_PATH" ]; then
-        echo "❌ Error: Environment file $ENV_FILE_PATH not found before final sourcing. This should not happen. Exiting."
+        echo "❌ Error: Environment file $ENV_FILE_PATH not found before final validation. This should not happen. Exiting."
         exit 1
     fi
-    source "$ENV_FILE_PATH"
 
     # Set default optional variables
     set_default_optional_variables "$ENV_FILE_PATH"
+    
+    # Source the environment file to ensure all variables are available for validation
+    source "$ENV_FILE_PATH"
     
     # Validate environment
     validate_environment
