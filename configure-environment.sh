@@ -8,6 +8,7 @@ SKIP_CREDENTIAL_UPDATE=false
 NO_COLLECTOR=false
 OVERRIDE_DEFAULTS_SCRIPT_FLAG=false
 DEVNET_MODE=false
+DOCKER_MODE=false
 
 # --- Define Top-Level Fixed Defaults ---
 DEFAULT_POWERLOOM_CHAIN="mainnet"
@@ -191,6 +192,11 @@ parse_arguments() {
                 DEVNET_MODE=true
                 shift
                 ;;
+            --docker-mode)
+                DOCKER_MODE=true
+                SKIP_CREDENTIAL_UPDATE=true
+                shift
+                ;;
             *)
                 shift
                 ;;
@@ -244,6 +250,17 @@ get_data_market_config() {
 # Function to prompt for user credentials
 prompt_for_credentials() {
     local env_file="$1"
+    
+    if [ "$DOCKER_MODE" = "true" ]; then
+        echo "🐳 Docker mode detected - using placeholder values for credentials."
+        echo "⚠️  Please update the generated $env_file with your actual credentials before running the services."
+        update_or_append_var "SOURCE_RPC_URL" "<YOUR_SOURCE_RPC_URL>" "$env_file"
+        update_or_append_var "SIGNER_ACCOUNT_ADDRESS" "<YOUR_SIGNER_ACCOUNT_ADDRESS>" "$env_file"
+        update_or_append_var "SIGNER_ACCOUNT_PRIVATE_KEY" "<YOUR_SIGNER_ACCOUNT_PRIVATE_KEY>" "$env_file"
+        update_or_append_var "SLOT_ID" "<YOUR_SLOT_ID>" "$env_file"
+        update_or_append_var "TELEGRAM_CHAT_ID" "<YOUR_TELEGRAM_CHAT_ID_OPTIONAL>" "$env_file"
+        return
+    fi
     
     read -p "Enter SOURCE_RPC_URL: " source_rpc_url_val
     update_or_append_var "SOURCE_RPC_URL" "$source_rpc_url_val" "$env_file"
@@ -672,6 +689,12 @@ main() {
 
     if [ "$SETUP_COMPLETE" = true ]; then
         echo "✅ Configuration complete. Environment file ready at $ENV_FILE_PATH"
+        
+        # In Docker mode, write the env file path to the result file for the build script
+        if [ "$DOCKER_MODE" = "true" ] && [ -n "$ENV_FILE_PATH" ]; then
+            echo "$ENV_FILE_PATH" > /tmp/setup_result
+            echo "🔗 Reported env file to build script: $ENV_FILE_PATH"
+        fi
     else
         echo "❌ Configuration incomplete or encountered errors. Please review messages and $ENV_FILE_PATH."
         exit 1
