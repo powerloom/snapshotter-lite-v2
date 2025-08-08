@@ -19,34 +19,17 @@ done
 echo "🏗️ Building setup container..."
 docker build -f Dockerfile.setup -t snapshotter-lite-setup:latest .
 
-# Determine docker compose command and files
-if command -v docker-compose >/dev/null 2>&1; then
-    DOCKER_COMPOSE_CMD="docker-compose"
-else
-    DOCKER_COMPOSE_CMD="docker compose"
-fi
-
-if [ "$DEV_MODE" = "true" ]; then
-    COMPOSE_FILE="docker-compose-dev.yaml"
-else
-    COMPOSE_FILE="docker-compose.yaml"
-fi
-
-# Export environment variables for docker-compose
-export DEVNET_MODE=${DEVNET_MODE:-false}
-export DATA_MARKET_CONTRACT_NUMBER=${DATA_MARKET_CONTRACT_NUMBER:-}
-export SKIP_CREDENTIAL_UPDATE=${SKIP_CREDENTIAL_UPDATE:-false}
-export NO_COLLECTOR=${NO_COLLECTOR:-false}
-export OVERRIDE_DEFAULTS_SCRIPT_FLAG=${OVERRIDE_DEFAULTS_SCRIPT_FLAG:-false}
-
 # Create a temporary file to capture the env file path from setup
 SETUP_RESULT_FILE=$(mktemp)
 
-# Run setup container to configure environment
+# Run setup container directly
 echo "🔧 Running setup container to configure environment..."
-$DOCKER_COMPOSE_CMD -f $COMPOSE_FILE --profile setup run --rm \
+docker run --rm -it \
+    -v "$(pwd):/app" \
     -v "$SETUP_RESULT_FILE:/tmp/setup_result" \
-    snapshotter-lite-setup bash -c "./configure-environment.sh --docker-mode $SETUP_ARGS"
+    -w /app \
+    snapshotter-lite-setup:latest \
+    bash -c "./configure-environment.sh $SETUP_ARGS --docker-mode"
 
 # Check if setup was successful by reading the result file
 if [ -f "$SETUP_RESULT_FILE" ] && [ -s "$SETUP_RESULT_FILE" ]; then
@@ -75,6 +58,10 @@ if [ -z "$FULL_NAMESPACE" ]; then
     echo "❌ FULL_NAMESPACE not found in $SELECTED_ENV_FILE"
     exit 1
 fi
+
+# Export variables so they're available to child scripts
+export FULL_NAMESPACE
+export NO_COLLECTOR
 
 if [ "$DEV_MODE" != "true" ]; then
     # Set image tag based on git branch

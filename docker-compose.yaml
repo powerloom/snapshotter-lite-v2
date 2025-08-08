@@ -1,24 +1,4 @@
 services:
-  snapshotter-lite-setup:
-    image: snapshotter-lite-setup:latest
-    container_name: snapshotter-lite-setup-${FULL_NAMESPACE}
-    volumes:
-      - ./:/app
-    environment:
-      - DEVNET_MODE=${DEVNET_MODE:-false}
-      - DATA_MARKET_CONTRACT_NUMBER=${DATA_MARKET_CONTRACT_NUMBER:-}
-      - SKIP_CREDENTIAL_UPDATE=${SKIP_CREDENTIAL_UPDATE:-false}
-      - NO_COLLECTOR=${NO_COLLECTOR:-false}
-      - OVERRIDE_DEFAULTS_SCRIPT_FLAG=${OVERRIDE_DEFAULTS_SCRIPT_FLAG:-false}
-    working_dir: /app
-    command: >
-      bash -c "
-        echo '🔧 Starting environment configuration...';
-        ./configure-environment.sh --docker-mode;
-        echo '✅ Configuration complete. Setup container finished.';
-      "
-    profiles: ["setup"]
-
   snapshotter-lite-local-collector:
     image: ghcr.io/powerloom/snapshotter-lite-local-collector:${LOCAL_COLLECTOR_IMAGE_TAG}
     container_name: snapshotter-lite-local-collector-${FULL_NAMESPACE}
