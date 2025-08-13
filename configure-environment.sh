@@ -564,6 +564,13 @@ handle_credential_updates() {
             update_or_append_var "SOURCE_RPC_URL" "$new_source_rpc_url" "$ENV_FILE_PATH"
             export SOURCE_RPC_URL="$new_source_rpc_url"
         fi
+
+        read -p "Enter new TELEGRAM_CHAT_ID (press enter to skip): " new_telegram_chat_id
+        if [ -n "$new_telegram_chat_id" ]; then
+            update_or_append_var "TELEGRAM_CHAT_ID" "$new_telegram_chat_id" "$ENV_FILE_PATH"
+            export TELEGRAM_CHAT_ID="$new_telegram_chat_id"
+        fi
+
         echo "Feel free to ask for help in our Discord: https://discord.gg/powerloom if you need assistance. DO NOT SHARE YOUR PRIVATE KEYS."
     fi
 }
