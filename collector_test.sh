@@ -40,7 +40,7 @@ if command -v nc &> /dev/null; then
         fi
     done
 else
-    test_command="curl -s --connect-timeout 5"
+    test_command="curl -s --connect-timeout 5 telnet://"
     for host in "${hosts[@]}"; do
         echo "  ⏳ Testing ${host}:${LOCAL_COLLECTOR_PORT}"
         if $test_command "${host}:${LOCAL_COLLECTOR_PORT}" 2>/dev/null; then
@@ -66,7 +66,12 @@ if [ "$test_ping" = true ] && [ "$test_namespace" = true ]; then
 else
     echo "⚠️  No active collector found - searching for available ports..."
     for port in {50051..51050}; do
-        if ! nc -z localhost $port 2>/dev/null; then
+        if command -v nc &> /dev/null; then
+            port_check_cmd="nc -z localhost $port"
+        else
+            port_check_cmd="curl -s --connect-timeout 1 telnet://localhost:$port"
+        fi
+        if ! $port_check_cmd 2>/dev/null; then
             echo "✅ Found available port: $port"
             sed -i".backup" "s/^LOCAL_COLLECTOR_PORT=.*/LOCAL_COLLECTOR_PORT=${port}/" "${ENV_FILE}"
             break
