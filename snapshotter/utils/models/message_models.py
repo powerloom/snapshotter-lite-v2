@@ -84,6 +84,7 @@ class ProcessHubCommand(BaseModel):
 class TelegramMessage(BaseModel):
     chatId: str
     slotId: int
+    message_thread_id: Optional[str]
 
 
 class TelegramEpochProcessingReportMessage(TelegramMessage):
