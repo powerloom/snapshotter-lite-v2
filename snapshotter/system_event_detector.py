@@ -517,11 +517,14 @@ class EventDetectorProcess(multiprocessing.Process):
             if not self._telegram_httpx_client:
                 self._logger.error('Telegram client not initialized')
                 return
+            
+            message_thread_id = settings.reporting.telegram_message_thread_id
+            message_thread_id = message_thread_id if message_thread_id else "0"
 
             try:
                 telegram_message = TelegramEpochProcessingReportMessage(
                     chatId=settings.reporting.telegram_chat_id,
-                    message_thread_id=settings.reporting.telegram_message_thread_id,
+                    message_thread_id=message_thread_id,
                     slotId=settings.slot_id,
                     issue=SnapshotterIssue(
                         instanceID=settings.instance_id,
