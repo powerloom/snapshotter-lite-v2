@@ -47,6 +47,7 @@ async def test_tg_reporting_call():
     telegram_message = TelegramSnapshotterReportMessage(
         chatId=settings.reporting.telegram_chat_id,
         slotId=settings.slot_id,
+        message_thread_id=settings.reporting.telegram_message_thread_id,
         issue=notification_message,
         status=SnapshotterStatus(
             projects=[],

@@ -14,7 +14,6 @@ from snapshotter.utils.default_logger import logger
 from snapshotter.utils.models.data_models import PreloaderResult
 from snapshotter.utils.models.message_models import EpochBase
 from snapshotter.utils.models.message_models import SnapshotProcessMessage
-from snapshotter.utils.models.message_models import SnapshotterIssue
 from snapshotter.utils.models.message_models import TelegramEpochProcessingReportMessage
 from snapshotter.utils.models.message_models import TelegramMessage
 from snapshotter.utils.models.message_models import TelegramSnapshotterReportMessage

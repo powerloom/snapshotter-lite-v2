@@ -521,6 +521,7 @@ class EventDetectorProcess(multiprocessing.Process):
             try:
                 telegram_message = TelegramEpochProcessingReportMessage(
                     chatId=settings.reporting.telegram_chat_id,
+                    message_thread_id=settings.reporting.telegram_message_thread_id,
                     slotId=settings.slot_id,
                     issue=SnapshotterIssue(
                         instanceID=settings.instance_id,
