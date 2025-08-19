@@ -519,7 +519,6 @@ class EventDetectorProcess(multiprocessing.Process):
                 return
             
             message_thread_id = settings.reporting.telegram_message_thread_id
-            message_thread_id = message_thread_id if message_thread_id else "0"
 
             try:
                 telegram_message = TelegramEpochProcessingReportMessage(

@@ -295,7 +295,6 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 )
 
                 message_thread_id = settings.reporting.telegram_message_thread_id
-                message_thread_id = message_thread_id if message_thread_id else "0"
 
                 telegram_message = TelegramSnapshotterReportMessage(
                     chatId=settings.reporting.telegram_chat_id,
