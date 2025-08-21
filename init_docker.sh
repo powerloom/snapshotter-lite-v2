@@ -9,6 +9,7 @@ handle_exit() {
     
     echo "Container exited with code $EXIT_CODE. Restarting in $ACTUAL_DELAY seconds..."
     sleep $ACTUAL_DELAY
+    exit 1
 }
 
 # Always run bootstrap

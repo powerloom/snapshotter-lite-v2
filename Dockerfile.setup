@@ -1,0 +1,27 @@
+FROM alpine:3.18
+
+# Install required tools for configuration
+RUN apk update && apk add --no-cache \
+    bash \
+    curl \
+    wget \
+    jq \
+    git \
+    findutils \
+    coreutils \
+    grep \
+    sed \
+    gawk
+
+# Set working directory
+WORKDIR /app
+
+# Copy the configuration script
+COPY configure-environment.sh /app/
+COPY env.example /app/
+
+# Make the script executable
+RUN chmod +x /app/configure-environment.sh
+
+# Default command
+CMD ["bash", "-c", "echo 'Setup container ready. Run configure-environment.sh to setup environment.'"]
