@@ -29,31 +29,23 @@ hosts=("localhost" "127.0.0.1" "0.0.0.0")
 test_ping=false
 test_namespace=false
 
-# Determine which port checking tool to use
-if command -v nc &> /dev/null; then
-    PORT_CHECK_CMD="nc -z"
-elif command -v netcat &> /dev/null; then
-    PORT_CHECK_CMD="netcat -z"
-else
-    echo "🔄 nc not found, checking for curl..."
-    if ! command -v curl &> /dev/null; then
-        echo "❌ curl is not installed as well..."
-        echo "⚠️ Please install either netcat or curl to continue"
-        exit 1
-    fi
-    PORT_CHECK_CMD="curl -s --connect-timeout 5 telnet://"
-fi
-
-# Test port connectivity
+# Test port connectivity using nc/netcat if available, otherwise use pure bash
 for host in "${hosts[@]}"; do
     echo "  ⏳ Testing ${host}:${LOCAL_COLLECTOR_PORT}"
-    if [[ "$PORT_CHECK_CMD" == *"curl"* ]]; then
-        if $PORT_CHECK_CMD "${host}:${LOCAL_COLLECTOR_PORT}" 2>/dev/null; then
+    
+    if command -v nc &> /dev/null; then
+        if nc -z "${host}" "${LOCAL_COLLECTOR_PORT}" 2>/dev/null; then
+            test_ping=true
+            break
+        fi
+    elif command -v netcat &> /dev/null; then
+        if netcat -z "${host}" "${LOCAL_COLLECTOR_PORT}" 2>/dev/null; then
             test_ping=true
             break
         fi
     else
-        if $PORT_CHECK_CMD "${host}" "${LOCAL_COLLECTOR_PORT}" 2>/dev/null; then
+        # Pure bash TCP connection test - available on all systems
+        if timeout 1 bash -c "</dev/tcp/${host}/${LOCAL_COLLECTOR_PORT}" 2>/dev/null; then
             test_ping=true
             break
         fi
