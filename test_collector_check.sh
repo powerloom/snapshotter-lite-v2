@@ -13,21 +13,36 @@ export FULL_NAMESPACE=TEST-MAINNET-ETH
 # Function to run the test
 run_test() {
     local nc_available=$1
-    local expected_port_in_use=$2
-    local test_description=$3
+    local curl_available=$2
+    local expected_port_in_use=$3
+    local test_description=$4
     
     echo "🧪 Test: $test_description"
     
     if [ "$nc_available" = "false" ]; then
-        # Create a function that overrides the command -v behavior for nc
+        # Create functions that override command behavior for nc, netcat and curl
         command() {
             if [ "$2" = "nc" ]; then
+                return 1
+            elif [ "$2" = "netcat" ]; then
+                return 1
+            elif [ "$curl_available" = "false" ] && [ "$2" = "curl" ]; then
                 return 1
             fi
             builtin command "$@"
         }
+        
+        # Override the actual commands too
+        nc() { return 1; }
+        netcat() { return 1; }
+        if [ "$curl_available" = "false" ]; then
+            curl() { return 1; }
+        fi
         export -f command
-        echo "  Disabled nc check via function override"
+        echo "  Disabled nc/netcat check via function override"
+        if [ "$curl_available" = "false" ]; then
+            echo "  Disabled curl check via function override"
+        fi
     else
         # Restore normal command behavior
         unset -f command
@@ -51,7 +66,27 @@ run_test() {
     fi
     
     echo "  Test result code: $TEST_RESULT"
-    return $TEST_RESULT
+    
+    # Verify expected exit codes
+    if [ "$nc_available" = "false" ] && [ "$curl_available" = "false" ]; then
+        # Should exit with 1 when no tools available
+        if [ "$TEST_RESULT" -eq 1 ]; then
+            echo "  ✅ Correctly exited with code 1 when no tools available"
+            return 0
+        else
+            echo "  ❌ Expected exit code 1 when no tools available, got $TEST_RESULT"
+            return 1
+        fi
+    elif [ "$expected_port_in_use" = "true" ] && [ "$TEST_RESULT" -eq 100 ]; then
+        echo "  ✅ Correctly detected running collector"
+        return 0
+    elif [ "$expected_port_in_use" = "false" ] && [ "$TEST_RESULT" -eq 101 ]; then
+        echo "  ✅ Correctly found available port"
+        return 0
+    else
+        echo "  ❌ Unexpected exit code $TEST_RESULT"
+        return 1
+    fi
 }
 
 # Function to kill any process using our test port
@@ -67,20 +102,31 @@ echo "Running test scenarios..."
 # Initial cleanup
 cleanup_port
 
-# Test 1: With nc, port free
-run_test "true" "false" "With netcat, port is free"
+echo "🧪 Testing with tools available..."
+# Test 1: With nc, port free (should exit 101)
+run_test "true" "true" "false" "With netcat and curl, port is free"
 cleanup_port
 
-# Test 2: With nc, port in use
-run_test "true" "true" "With netcat, port is in use"
+# Test 2: With nc, port in use (should exit 100)
+run_test "true" "true" "true" "With netcat and curl, port is in use"
 cleanup_port
 
-# Test 3: Without nc, port free
-run_test "false" "false" "Without netcat, port is free"
+echo "🧪 Testing with curl fallback..."
+# Test 3: Without nc but with curl, port free (should exit 101)
+run_test "false" "true" "false" "Without netcat but with curl, port is free"
 cleanup_port
 
-# Test 4: Without nc, port in use
-run_test "false" "true" "Without netcat, port is in use"
+# Test 4: Without nc but with curl, port in use (should exit 100)
+run_test "false" "true" "true" "Without netcat but with curl, port is in use"
+cleanup_port
+
+echo "🧪 Testing with no tools available..."
+# Test 5: Without nc and without curl (should exit 1)
+run_test "false" "false" "false" "Without netcat and without curl, should exit with code 1"
+cleanup_port
+
+# Test 6: Without nc and without curl (should exit 1)
+run_test "false" "false" "true" "Without netcat and without curl, should exit with code 1"
 cleanup_port
 
 # Cleanup
