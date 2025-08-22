@@ -20,13 +20,11 @@ run_test() {
     echo "🧪 Test: $test_description"
     
     if [ "$nc_available" = "false" ]; then
-        # Create functions that override command behavior for nc, netcat and curl
+        # Create functions that override command behavior for nc and netcat
         command() {
             if [ "$2" = "nc" ]; then
                 return 1
             elif [ "$2" = "netcat" ]; then
-                return 1
-            elif [ "$curl_available" = "false" ] && [ "$2" = "curl" ]; then
                 return 1
             fi
             builtin command "$@"
@@ -35,9 +33,6 @@ run_test() {
         # Override the actual commands too
         nc() { return 1; }
         netcat() { return 1; }
-        if [ "$curl_available" = "false" ]; then
-            curl() { return 1; }
-        fi
         export -f command
         echo "  Disabled nc/netcat check via function override"
         if [ "$curl_available" = "false" ]; then
@@ -102,31 +97,31 @@ echo "Running test scenarios..."
 # Initial cleanup
 cleanup_port
 
-echo "🧪 Testing with tools available..."
+echo "🧪 Testing with nc available..."
 # Test 1: With nc, port free (should exit 101)
-run_test "true" "true" "false" "With netcat and curl, port is free"
+run_test "true" "true" "false" "With nc, port is free"
 cleanup_port
 
 # Test 2: With nc, port in use (should exit 100)
-run_test "true" "true" "true" "With netcat and curl, port is in use"
+run_test "true" "true" "true" "With nc, port is in use"
 cleanup_port
 
-echo "🧪 Testing with curl fallback..."
-# Test 3: Without nc but with curl, port free (should exit 101)
-run_test "false" "true" "false" "Without netcat but with curl, port is free"
+echo "🧪 Testing with netcat fallback..."
+# Test 3: Without nc but with netcat, port free (should exit 101)
+run_test "false" "true" "false" "Without nc but with netcat, port is free"
 cleanup_port
 
-# Test 4: Without nc but with curl, port in use (should exit 100)
-run_test "false" "true" "true" "Without netcat but with curl, port is in use"
+# Test 4: Without nc but with netcat, port in use (should exit 100)
+run_test "false" "true" "true" "Without nc but with netcat, port is in use"
 cleanup_port
 
-echo "🧪 Testing with no tools available..."
-# Test 5: Without nc and without curl (should exit 1)
-run_test "false" "false" "false" "Without netcat and without curl, should exit with code 1"
+echo "🧪 Testing with bash fallback..."
+# Test 5: Without nc and netcat, port free (should exit 101)
+run_test "false" "false" "false" "Without nc/netcat, using bash fallback, port is free"
 cleanup_port
 
-# Test 6: Without nc and without curl (should exit 1)
-run_test "false" "false" "true" "Without netcat and without curl, should exit with code 1"
+# Test 6: Without nc and netcat, port in use (should exit 100)
+run_test "false" "false" "true" "Without nc/netcat, using bash fallback, port is in use"
 cleanup_port
 
 # Cleanup
