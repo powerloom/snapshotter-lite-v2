@@ -29,26 +29,36 @@ hosts=("localhost" "127.0.0.1" "0.0.0.0")
 test_ping=false
 test_namespace=false
 
-# Test port connectivity
+# Determine which port checking tool to use
 if command -v nc &> /dev/null; then
-    test_command="nc -z"
-    for host in "${hosts[@]}"; do
-        echo "  ⏳ Testing ${host}:${LOCAL_COLLECTOR_PORT}"
-        if ${test_command} "${host}" "${LOCAL_COLLECTOR_PORT}" 2>/dev/null; then
-            test_ping=true
-            break
-        fi
-    done
+    PORT_CHECK_CMD="nc -z"
+elif command -v netcat &> /dev/null; then
+    PORT_CHECK_CMD="netcat -z"
 else
-    test_command="curl -s --connect-timeout 5 telnet://"
-    for host in "${hosts[@]}"; do
-        echo "  ⏳ Testing ${host}:${LOCAL_COLLECTOR_PORT}"
-        if $test_command "${host}:${LOCAL_COLLECTOR_PORT}" 2>/dev/null; then
+    echo "🔄 nc not found, checking for curl..."
+    if ! command -v curl &> /dev/null; then
+        echo "❌ curl is not installed as well..."
+        echo "⚠️ Please install either netcat or curl to continue"
+        exit 1
+    fi
+    PORT_CHECK_CMD="curl -s --connect-timeout 5 telnet://"
+fi
+
+# Test port connectivity
+for host in "${hosts[@]}"; do
+    echo "  ⏳ Testing ${host}:${LOCAL_COLLECTOR_PORT}"
+    if [[ "$PORT_CHECK_CMD" == *"curl"* ]]; then
+        if $PORT_CHECK_CMD "${host}:${LOCAL_COLLECTOR_PORT}" 2>/dev/null; then
             test_ping=true
             break
         fi
-    done
-fi
+    else
+        if $PORT_CHECK_CMD "${host}" "${LOCAL_COLLECTOR_PORT}" 2>/dev/null; then
+            test_ping=true
+            break
+        fi
+    fi
+done
 
 # Test container status
 container_name="snapshotter-lite-local-collector-${FULL_NAMESPACE}"
@@ -66,12 +76,18 @@ if [ "$test_ping" = true ] && [ "$test_namespace" = true ]; then
 else
     echo "⚠️  No active collector found - searching for available ports..."
     for port in {50051..51050}; do
-        if command -v nc &> /dev/null; then
-            port_check_cmd="nc -z localhost $port"
+        port_is_free=false
+        if [[ "$PORT_CHECK_CMD" == *"curl"* ]]; then
+            if ! $PORT_CHECK_CMD "localhost:$port" 2>/dev/null; then
+                port_is_free=true
+            fi
         else
-            port_check_cmd="curl -s --connect-timeout 1 telnet://localhost:$port"
+            if ! $PORT_CHECK_CMD "localhost" "$port" 2>/dev/null; then
+                port_is_free=true
+            fi
         fi
-        if ! $port_check_cmd 2>/dev/null; then
+        
+        if [ "$port_is_free" = true ]; then
             echo "✅ Found available port: $port"
             sed -i".backup" "s/^LOCAL_COLLECTOR_PORT=.*/LOCAL_COLLECTOR_PORT=${port}/" "${ENV_FILE}"
             break
