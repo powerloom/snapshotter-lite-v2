@@ -49,6 +49,7 @@ class ReportingConfig(BaseModel):
     telegram_chat_id: str
     failure_report_frequency: int
     notification_cooldown: int
+    telegram_message_thread_id: Optional[str] = ""
 
 
 class Logs(BaseModel):
