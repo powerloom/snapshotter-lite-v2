@@ -10,6 +10,8 @@ services:
       - ${LOCAL_COLLECTOR_P2P_PORT}:${LOCAL_COLLECTOR_P2P_PORT}
     volumes:
       - ./shared-volume:/keys
+      - ./logs-collector-${FULL_NAMESPACE_LOWER}:/app/logs
+      - ./logs-collector-${FULL_NAMESPACE_LOWER}/archive:/app/logs/archive
     environment:
       - DATA_MARKET_CONTRACT=$DATA_MARKET_CONTRACT
       - LOCAL_COLLECTOR_PORT=$LOCAL_COLLECTOR_PORT
@@ -22,9 +24,10 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-4}
       - BOOTSTRAP_NODE_ADDR=$BOOTSTRAP_NODE_ADDR
       - LOCAL_COLLECTOR_P2P_PORT=${LOCAL_COLLECTOR_P2P_PORT:-8001}
+      - LOCAL_COLLECTOR_PRIVATE_KEY=${LOCAL_COLLECTOR_PRIVATE_KEY}
       - RENDEZVOUS_POINT=${RENDEZVOUS_POINT:-powerloom-snapshot-sequencer-network}
       - LIBP2P_LOGGING=debug
-
+      - LOG_FILE=/app/logs/collector.log
     networks:
       - custom_network
     restart: on-failure:10
