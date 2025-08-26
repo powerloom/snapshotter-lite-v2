@@ -16,15 +16,17 @@ handle_exit() {
 echo "🚀 Running bootstrap..."
 
 echo "📦 Cloning fresh config repo..."
-git clone $SNAPSHOT_CONFIG_REPO "/app/config"
+git clone --depth 1 --branch $SNAPSHOT_CONFIG_REPO_BRANCH $SNAPSHOT_CONFIG_REPO "/app/config"
 cd /app/config
-git checkout $SNAPSHOT_CONFIG_REPO_BRANCH
+git fetch --depth 1 origin $SNAPSHOT_CONFIG_REPO_COMMIT
+git reset --hard $SNAPSHOT_CONFIG_REPO_COMMIT
 cd ..
 
 echo "📦 Cloning fresh compute repo..."
-git clone $SNAPSHOTTER_COMPUTE_REPO "/app/computes"
+git clone --depth 1 --branch $SNAPSHOTTER_COMPUTE_REPO_BRANCH $SNAPSHOTTER_COMPUTE_REPO "/app/computes"
 cd /app/computes
-git checkout $SNAPSHOTTER_COMPUTE_REPO_BRANCH
+git fetch --depth 1 origin $SNAPSHOTTER_COMPUTE_REPO_COMMIT
+git reset --hard $SNAPSHOTTER_COMPUTE_REPO_COMMIT
 cd ..
 
 if [ $? -ne 0 ]; then

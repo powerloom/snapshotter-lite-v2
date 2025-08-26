@@ -1,15 +1,70 @@
 #!/bin/bash
 
-# Run configuration
-source ./configure-environment.sh "$@"
-if [ $? -ne 0 ]; then
-    echo "❌ Configuration failed"
+# Parse arguments to check for dev mode and other flags
+DEV_MODE=false
+SETUP_ARGS=""
+
+for arg in "$@"; do
+    case $arg in
+        --dev-mode)
+            DEV_MODE=true
+            ;;
+        *)
+            SETUP_ARGS="$SETUP_ARGS $arg"
+            ;;
+    esac
+done
+
+# Build the setup container first
+echo "🏗️ Building setup container..."
+docker build -f Dockerfile.setup -t snapshotter-lite-setup:latest .
+
+# Create a temporary file to capture the env file path from setup
+SETUP_RESULT_FILE=$(mktemp)
+
+# Run setup container directly
+echo "🔧 Running setup container to configure environment..."
+docker run --rm -it \
+    -v "$(pwd):/app" \
+    -v "$SETUP_RESULT_FILE:/tmp/setup_result" \
+    -w /app \
+    snapshotter-lite-setup:latest \
+    bash -c "./configure-environment.sh $SETUP_ARGS --docker-mode"
+
+# Remove the setup container image
+docker rmi snapshotter-lite-setup:latest
+
+# Check if setup was successful by reading the result file
+if [ -f "$SETUP_RESULT_FILE" ] && [ -s "$SETUP_RESULT_FILE" ]; then
+    SELECTED_ENV_FILE=$(cat "$SETUP_RESULT_FILE")
+    rm -f "$SETUP_RESULT_FILE"
+    
+    if [ -n "$SELECTED_ENV_FILE" ] && [ -f "$SELECTED_ENV_FILE" ]; then
+        echo "ℹ️ Setup container configured: $SELECTED_ENV_FILE"
+    else
+        echo "❌ Setup container failed to report a valid env file."
+        echo "   Reported: '$SELECTED_ENV_FILE'"
+        echo "   This indicates a problem with the configuration process."
+        exit 1
+    fi
+else
+    echo "❌ Setup container did not complete successfully or failed to report results."
+    rm -f "$SETUP_RESULT_FILE"
     exit 1
 fi
 
+# Source the environment file to get variables
+source "$SELECTED_ENV_FILE"
 
-# Source the environment file
-source ".env-${FULL_NAMESPACE}"
+# Ensure FULL_NAMESPACE is available
+if [ -z "$FULL_NAMESPACE" ]; then
+    echo "❌ FULL_NAMESPACE not found in $SELECTED_ENV_FILE"
+    exit 1
+fi
+
+# Export variables so they're available to child scripts
+export FULL_NAMESPACE
+export NO_COLLECTOR
 
 if [ "$DEV_MODE" != "true" ]; then
     # Set image tag based on git branch
@@ -65,14 +120,14 @@ export FULL_NAMESPACE_LOWER
 
 COMPOSE_PROFILES="${COLLECTOR_PROFILE_STRING}"
 
-# Modify the deploy-services call to use the profiles
+# Modify the deploy-services call to use the profiles (setup already ran)
 if [ "$DEV_MODE" == "true" ]; then
-    ./deploy-services.sh --env-file ".env-${FULL_NAMESPACE}" \
+    ./deploy-services.sh --env-file "$SELECTED_ENV_FILE" \
         --project-name "$PROJECT_NAME_LOWER" \
         --collector-profile "$COMPOSE_PROFILES" \
         --dev-mode
 else
-    ./deploy-services.sh --env-file ".env-${FULL_NAMESPACE}" \
+    ./deploy-services.sh --env-file "$SELECTED_ENV_FILE" \
         --project-name "$PROJECT_NAME_LOWER" \
         --collector-profile "$COMPOSE_PROFILES" \
         --image-tag "$IMAGE_TAG"

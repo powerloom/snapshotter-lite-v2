@@ -8,41 +8,41 @@ SKIP_CREDENTIAL_UPDATE=false
 NO_COLLECTOR=false
 OVERRIDE_DEFAULTS_SCRIPT_FLAG=false
 DEVNET_MODE=false
+DOCKER_MODE=false
 
-# --- Define Top-Level Fixed Defaults ---
-DEFAULT_POWERLOOM_CHAIN="mainnet"
-DEFAULT_SOURCE_CHAIN="ETH"
-DEFAULT_NAMESPACE="UNISWAPV2"
-DEFAULT_POWERLOOM_RPC_URL="https://rpc-v2.powerloom.network"
-DEFAULT_PROTOCOL_STATE_CONTRACT="0x000AA7d3a6a2556496f363B59e56D9aA1881548F"
-DEFAULT_DATA_MARKET_CONTRACT="0x21cb57C1f2352ad215a463DD867b838749CD3b8f"
-DEFAULT_SNAPSHOT_CONFIG_REPO_BRANCH="eth_uniswapv2-lite_v2"
-DEFAULT_SNAPSHOTTER_COMPUTE_REPO_BRANCH="eth_uniswapv2_lite_v2"
-DEFAULT_CONNECTION_REFRESH_INTERVAL_SEC=60
-DEFAULT_TELEGRAM_NOTIFICATION_COOLDOWN=300
+# GitHub configuration URL
+MARKETS_CONFIG_URL="https://raw.githubusercontent.com/powerloom/curated-datamarkets/main/sources.json"
 
-# --- Define Top-Level Fixed Defaults for Devnet ---
-DEFAULT_DEVNET_POWERLOOM_CHAIN="devnet"
-DEFAULT_DEVNET_SOURCE_CHAIN="ETH"
-DEFAULT_DEVNET_NAMESPACE="UNISWAPV2"
-DEFAULT_DEVNET_POWERLOOM_RPC_URL="https://rpc-devnet.powerloom.dev"
-DEFAULT_DEVNET_PROTOCOL_STATE_CONTRACT="0x3B5A0FB70ef68B5dd677C7d614dFB89961f97401"
-DEFAULT_DEVNET_SNAPSHOT_CONFIG_REPO_BRANCH="eth_uniswapv2-lite_v2"
-DEFAULT_DEVNET_SNAPSHOTTER_COMPUTE_REPO_BRANCH="eth_uniswapv2_lite_v2"
-DEFAULT_DEVNET_CONNECTION_REFRESH_INTERVAL_SEC=60
-DEFAULT_DEVNET_TELEGRAM_NOTIFICATION_COOLDOWN=300
+# Dynamic defaults (will be populated from GitHub API)
+DEFAULT_POWERLOOM_CHAIN=""
+DEFAULT_SOURCE_CHAIN=""
+DEFAULT_NAMESPACE=""
+DEFAULT_POWERLOOM_RPC_URL=""
+DEFAULT_PROTOCOL_STATE_CONTRACT=""
+DEFAULT_DATA_MARKET_CONTRACT=""
+DEFAULT_SNAPSHOT_CONFIG_REPO_BRANCH=""
+DEFAULT_SNAPSHOT_CONFIG_REPO_COMMIT=""
+DEFAULT_SNAPSHOTTER_COMPUTE_REPO_BRANCH=""
+DEFAULT_SNAPSHOTTER_COMPUTE_REPO_COMMIT=""
+DEFAULT_CONNECTION_REFRESH_INTERVAL_SEC=""
+DEFAULT_TELEGRAM_NOTIFICATION_COOLDOWN=""
 
-# --- Initialize Working Configuration Variables from Fixed Defaults ---
-POWERLOOM_CHAIN="$DEFAULT_POWERLOOM_CHAIN"
-SOURCE_CHAIN="$DEFAULT_SOURCE_CHAIN"
-NAMESPACE="$DEFAULT_NAMESPACE"
-POWERLOOM_RPC_URL="$DEFAULT_POWERLOOM_RPC_URL"
-PROTOCOL_STATE_CONTRACT="$DEFAULT_PROTOCOL_STATE_CONTRACT"
-DATA_MARKET_CONTRACT="$DEFAULT_DATA_MARKET_CONTRACT"
-SNAPSHOT_CONFIG_REPO_BRANCH="$DEFAULT_SNAPSHOT_CONFIG_REPO_BRANCH"
-SNAPSHOTTER_COMPUTE_REPO_BRANCH="$DEFAULT_SNAPSHOTTER_COMPUTE_REPO_BRANCH"
-CONNECTION_REFRESH_INTERVAL_SEC="$DEFAULT_CONNECTION_REFRESH_INTERVAL_SEC"
-TELEGRAM_NOTIFICATION_COOLDOWN="$DEFAULT_TELEGRAM_NOTIFICATION_COOLDOWN"
+DEFAULT_DEVNET_POWERLOOM_CHAIN=""
+DEFAULT_DEVNET_SOURCE_CHAIN=""
+DEFAULT_DEVNET_NAMESPACE=""
+DEFAULT_DEVNET_POWERLOOM_RPC_URL=""
+DEFAULT_DEVNET_PROTOCOL_STATE_CONTRACT=""
+DEFAULT_DEVNET_SNAPSHOT_CONFIG_REPO_BRANCH=""
+DEFAULT_DEVNET_SNAPSHOT_CONFIG_REPO_COMMIT=""
+DEFAULT_DEVNET_SNAPSHOTTER_COMPUTE_REPO_BRANCH=""
+DEFAULT_DEVNET_SNAPSHOTTER_COMPUTE_REPO_COMMIT=""
+DEFAULT_DEVNET_CONNECTION_REFRESH_INTERVAL_SEC=""
+DEFAULT_DEVNET_TELEGRAM_NOTIFICATION_COOLDOWN=""
+
+# Global variables for storing fetched configuration
+MARKETS_CONFIG_JSON=""
+AVAILABLE_CHAINS=""
+AVAILABLE_MARKETS=""
 
 # --- Global Variables ---
 ENV_FILE_PATH=""
@@ -76,6 +76,236 @@ final_cleanup_handler() {
 
 trap 'handle_error $LINENO' ERR
 trap final_cleanup_handler EXIT
+
+# Function to safely parse configuration output into variables
+parse_config_vars() {
+    local config_output="$1"
+    
+    # Clear any existing temp variables
+    CHAIN_RPC_URL=""
+    DATA_MARKET_CONTRACT=""
+    PROTOCOL_STATE_CONTRACT=""
+    SNAPSHOT_CONFIG_BRANCH=""
+    SNAPSHOT_CONFIG_COMMIT=""
+    SNAPSHOTTER_COMPUTE_BRANCH=""
+    SNAPSHOTTER_COMPUTE_COMMIT=""
+    SOURCE_CHAIN=""
+    
+    # Parse each line and set the appropriate variable
+    while IFS= read -r line; do
+        if [ -n "$line" ] && [[ "$line" == *"="* ]]; then
+            case "$line" in
+                CHAIN_RPC_URL=*)
+                    CHAIN_RPC_URL="${line#CHAIN_RPC_URL=}"
+                    ;;
+                DATA_MARKET_CONTRACT=*)
+                    DATA_MARKET_CONTRACT="${line#DATA_MARKET_CONTRACT=}"
+                    ;;
+                PROTOCOL_STATE_CONTRACT=*)
+                    PROTOCOL_STATE_CONTRACT="${line#PROTOCOL_STATE_CONTRACT=}"
+                    ;;
+                SNAPSHOT_CONFIG_BRANCH=*)
+                    SNAPSHOT_CONFIG_BRANCH="${line#SNAPSHOT_CONFIG_BRANCH=}"
+                    ;;
+                SNAPSHOT_CONFIG_COMMIT=*)
+                    SNAPSHOT_CONFIG_COMMIT="${line#SNAPSHOT_CONFIG_COMMIT=}"
+                    ;;
+                SNAPSHOTTER_COMPUTE_BRANCH=*)
+                    SNAPSHOTTER_COMPUTE_BRANCH="${line#SNAPSHOTTER_COMPUTE_BRANCH=}"
+                    ;;
+                SNAPSHOTTER_COMPUTE_COMMIT=*)
+                    SNAPSHOTTER_COMPUTE_COMMIT="${line#SNAPSHOTTER_COMPUTE_COMMIT=}"
+                    ;;
+                SOURCE_CHAIN=*)
+                    SOURCE_CHAIN="${line#SOURCE_CHAIN=}"
+                    ;;
+            esac
+        fi
+    done <<< "$config_output"
+}
+
+# Function to check if jq is available
+has_jq() {
+    command -v jq >/dev/null 2>&1
+}
+
+# Function to extract chain configuration using jq (preferred method)
+extract_chain_config_jq() {
+    local chain_name="$1"
+    local market_name="$2"
+    
+    if [ -z "$MARKETS_CONFIG_JSON" ]; then
+        return 1
+    fi
+    
+    # Use jq to extract configuration with robust error handling
+    local jq_filter=".[] | select(.powerloomChain.name == \"$chain_name\") | {
+        rpcURL: .powerloomChain.rpcURL,
+        market: (.dataMarkets[]? | select(.name == \"$market_name\"))
+    }"
+    
+    local result
+    local jq_error
+    if ! result=$(echo "$MARKETS_CONFIG_JSON" | jq -c "$jq_filter" 2>&1); then
+        jq_error="$result"
+        echo "⚠️  jq parsing failed for chain: $chain_name, market: $market_name" >&2
+        echo "🔍 jq error: $jq_error" >&2
+        echo "🔍 jq filter used: $jq_filter" >&2
+        return 1
+    fi
+    
+    if [ "$result" = "null" ] || [ -z "$result" ] || [ "$result" = "{}" ]; then
+        return 1
+    fi
+    
+    # Extract individual values using jq with null handling
+    local rpc_url=$(echo "$result" | jq -r '.rpcURL // empty' 2>/dev/null)
+    local contract_addr=$(echo "$result" | jq -r '.market.contractAddress // empty' 2>/dev/null)
+    local protocol_state=$(echo "$result" | jq -r '.market.powerloomProtocolStateContractAddress // empty' 2>/dev/null)
+    local config_branch=$(echo "$result" | jq -r '.market.config.branch // empty' 2>/dev/null)
+    local config_commit=$(echo "$result" | jq -r '.market.config.commit // empty' 2>/dev/null)
+    local compute_branch=$(echo "$result" | jq -r '.market.compute.branch // empty' 2>/dev/null)
+    local compute_commit=$(echo "$result" | jq -r '.market.compute.commit // empty' 2>/dev/null)
+    local source_chain=$(echo "$result" | jq -r '.market.sourceChain // empty' 2>/dev/null)
+    
+    # Normalize SOURCE_CHAIN (e.g., "ETH-MAINNET" -> "ETH")
+    if [[ "$source_chain" == *"-"* ]]; then
+        source_chain="${source_chain%%-*}"
+    fi
+    
+    # Output in shell variable format (only if values exist)
+    [ -n "$rpc_url" ] && echo "CHAIN_RPC_URL=$rpc_url"
+    [ -n "$contract_addr" ] && echo "DATA_MARKET_CONTRACT=$contract_addr"
+    [ -n "$protocol_state" ] && echo "PROTOCOL_STATE_CONTRACT=$protocol_state"
+    [ -n "$config_branch" ] && echo "SNAPSHOT_CONFIG_BRANCH=$config_branch"
+    [ -n "$config_commit" ] && echo "SNAPSHOT_CONFIG_COMMIT=$config_commit"
+    [ -n "$compute_branch" ] && echo "SNAPSHOTTER_COMPUTE_BRANCH=$compute_branch"
+    [ -n "$compute_commit" ] && echo "SNAPSHOTTER_COMPUTE_COMMIT=$compute_commit"
+    [ -n "$source_chain" ] && echo "SOURCE_CHAIN=$source_chain"
+}
+
+# Function to extract chain configuration using jq (requires jq to be installed)
+extract_chain_config() {
+    local chain_name="$1"
+    local market_name="$2"
+    
+    # Check if jq is available
+    if ! has_jq; then
+        echo "❌ Error: jq is required for parsing curated data market configuration but is not installed." >&2
+        echo "ℹ️  Please install jq in your Docker container or system environment." >&2
+        return 1
+    fi
+    
+    extract_chain_config_jq "$chain_name" "$market_name"
+}
+
+# Function to fetch markets configuration from GitHub
+fetch_markets_config() {
+    echo "🌐 Fetching latest configuration from GitHub..."
+    
+    # Try to fetch the configuration with timeout
+    if command -v curl >/dev/null 2>&1; then
+        MARKETS_CONFIG_JSON=$(curl -s --connect-timeout 10 --max-time 30 "$MARKETS_CONFIG_URL" 2>/dev/null)
+    elif command -v wget >/dev/null 2>&1; then
+        MARKETS_CONFIG_JSON=$(wget -qO- --timeout=30 --connect-timeout=10 "$MARKETS_CONFIG_URL" 2>/dev/null)
+    else
+        echo "⚠️  Neither curl nor wget found. Exiting..."
+        exit 1
+    fi
+    
+    # Basic check if we got something that looks like JSON
+    if [ -z "$MARKETS_CONFIG_JSON" ] || ! echo "$MARKETS_CONFIG_JSON" | grep -q "powerloomChain"; then
+        echo "⚠️  Failed to fetch or parse configuration from GitHub. Exiting..."
+        exit 1
+    fi
+    
+    # Validate JSON structure if jq is available
+    if has_jq; then
+        if ! echo "$MARKETS_CONFIG_JSON" | jq -e 'type == "array" and length > 0 and .[0].powerloomChain' >/dev/null 2>&1; then
+            echo "⚠️  Invalid JSON structure in fetched configuration. Exiting..."
+            exit 1
+        fi
+    fi
+    
+    echo "✅ Successfully fetched configuration from GitHub."
+    return 0
+}
+
+# Function to initialize default configuration values
+initialize_default_config() {
+    # Check if jq is available for JSON parsing
+    if ! has_jq; then
+        echo "⚠️  jq is not available. Exiting..." >&2
+        exit 1
+    else
+        # Try to fetch from GitHub first
+        if ! fetch_markets_config; then
+            echo "⚠️  Failed to fetch configuration from GitHub. Exiting..." >&2
+            exit 1
+        fi
+    fi
+    
+    echo "🔧 Initializing configuration from GitHub data..."
+
+    # Extract mainnet UNISWAPV2 as default
+    local mainnet_config=$(extract_chain_config "mainnet" "UNISWAPV2")
+    if [ -n "$mainnet_config" ]; then
+        parse_config_vars "$mainnet_config"
+        DEFAULT_POWERLOOM_CHAIN="mainnet"
+        DEFAULT_SOURCE_CHAIN="$SOURCE_CHAIN"
+        DEFAULT_NAMESPACE="UNISWAPV2"
+        DEFAULT_POWERLOOM_RPC_URL="$CHAIN_RPC_URL"
+        DEFAULT_PROTOCOL_STATE_CONTRACT="$PROTOCOL_STATE_CONTRACT"
+        DEFAULT_DATA_MARKET_CONTRACT="$DATA_MARKET_CONTRACT"
+        DEFAULT_SNAPSHOT_CONFIG_REPO_BRANCH="$SNAPSHOT_CONFIG_BRANCH"
+        DEFAULT_SNAPSHOT_CONFIG_REPO_COMMIT="$SNAPSHOT_CONFIG_COMMIT"
+        DEFAULT_SNAPSHOTTER_COMPUTE_REPO_BRANCH="$SNAPSHOTTER_COMPUTE_BRANCH"
+        DEFAULT_SNAPSHOTTER_COMPUTE_REPO_COMMIT="$SNAPSHOTTER_COMPUTE_COMMIT"
+        DEFAULT_CONNECTION_REFRESH_INTERVAL_SEC="60"
+        DEFAULT_TELEGRAM_NOTIFICATION_COOLDOWN="300"
+    fi
+
+    # Extract devnet UNISWAPV2 as default
+    local devnet_config=$(extract_chain_config "devnet" "UNISWAPV2")
+    if [ -n "$devnet_config" ]; then
+        parse_config_vars "$devnet_config"
+        DEFAULT_DEVNET_POWERLOOM_CHAIN="devnet"
+        DEFAULT_DEVNET_SOURCE_CHAIN="$SOURCE_CHAIN"
+        DEFAULT_DEVNET_NAMESPACE="UNISWAPV2"
+        DEFAULT_DEVNET_POWERLOOM_RPC_URL="$CHAIN_RPC_URL"
+        DEFAULT_DEVNET_PROTOCOL_STATE_CONTRACT="$PROTOCOL_STATE_CONTRACT"
+        DEFAULT_DEVNET_SNAPSHOT_CONFIG_REPO_BRANCH="$SNAPSHOT_CONFIG_BRANCH"
+        DEFAULT_DEVNET_SNAPSHOT_CONFIG_REPO_COMMIT="$SNAPSHOT_CONFIG_COMMIT"
+        DEFAULT_DEVNET_SNAPSHOTTER_COMPUTE_REPO_BRANCH="$SNAPSHOTTER_COMPUTE_BRANCH"
+        DEFAULT_DEVNET_SNAPSHOTTER_COMPUTE_REPO_COMMIT="$SNAPSHOTTER_COMPUTE_COMMIT"
+        DEFAULT_DEVNET_CONNECTION_REFRESH_INTERVAL_SEC="60"
+        DEFAULT_DEVNET_TELEGRAM_NOTIFICATION_COOLDOWN="300"
+    fi
+
+    if [ -z "$DEFAULT_POWERLOOM_RPC_URL" ]; then
+        echo "⚠️  Failed to extract mainnet config. Exiting..."
+        exit 1
+    fi
+
+    if [ -z "$DEFAULT_DEVNET_POWERLOOM_RPC_URL" ]; then
+        echo "⚠️  Failed to extract devnet config. Exiting..."
+        exit 1
+    fi
+
+    # Initialize working configuration variables from defaults
+    POWERLOOM_CHAIN="$DEFAULT_POWERLOOM_CHAIN"
+    SOURCE_CHAIN="$DEFAULT_SOURCE_CHAIN"
+    NAMESPACE="$DEFAULT_NAMESPACE"
+    POWERLOOM_RPC_URL="$DEFAULT_POWERLOOM_RPC_URL"
+    PROTOCOL_STATE_CONTRACT="$DEFAULT_PROTOCOL_STATE_CONTRACT"
+    DATA_MARKET_CONTRACT="$DEFAULT_DATA_MARKET_CONTRACT"
+    SNAPSHOT_CONFIG_REPO_BRANCH="$DEFAULT_SNAPSHOT_CONFIG_REPO_BRANCH"
+    SNAPSHOT_CONFIG_REPO_COMMIT="$DEFAULT_SNAPSHOT_CONFIG_REPO_COMMIT"
+    SNAPSHOTTER_COMPUTE_REPO_BRANCH="$DEFAULT_SNAPSHOTTER_COMPUTE_REPO_BRANCH"
+    SNAPSHOTTER_COMPUTE_REPO_COMMIT="$DEFAULT_SNAPSHOTTER_COMPUTE_REPO_COMMIT"
+    CONNECTION_REFRESH_INTERVAL_SEC="$DEFAULT_CONNECTION_REFRESH_INTERVAL_SEC"
+    TELEGRAM_NOTIFICATION_COOLDOWN="$DEFAULT_TELEGRAM_NOTIFICATION_COOLDOWN"
+}
 
 # Helper function to mask sensitive values for logging
 mask_sensitive_value() {
@@ -191,6 +421,10 @@ parse_arguments() {
                 DEVNET_MODE=true
                 shift
                 ;;
+            --docker-mode)
+                DOCKER_MODE=true
+                shift
+                ;;
             *)
                 shift
                 ;;
@@ -198,41 +432,66 @@ parse_arguments() {
     done
 }
 
-# Function to get data market configuration
+# Function to get data market configuration dynamically
 get_data_market_config() {
     local choice="$1"
     local is_devnet="${2:-false}"
     
-    # Define contract addresses
-    local MAINNET_AAVEV3_CONTRACT="0x0000000000000000000000000000000000000000"
-    local MAINNET_UNISWAPV2_CONTRACT="0x21cb57C1f2352ad215a463DD867b838749CD3b8f"
-    local DEVNET_AAVEV3_CONTRACT="0x4229Ad271d8b11f2AdBDe77099752a534470876b"
-    local DEVNET_UNISWAPV2_CONTRACT="0x8C3fDC3A281BbB8231c9c92712fE670eFA655e5f"
+    local chain_name="mainnet"
+    if [ "$is_devnet" = "true" ]; then
+        chain_name="devnet"
+    fi
     
     case $choice in
         "1")
-            if [ "$is_devnet" = "true" ]; then
-                echo "Aave V3 selected for devnet"
-                export DATA_MARKET_CONTRACT="$DEVNET_AAVEV3_CONTRACT"
+            echo "Aave V3 selected for $chain_name"
+            local config_result=$(extract_chain_config "$chain_name" "AAVEV3")
+            if [ -n "$config_result" ]; then
+                parse_config_vars "$config_result"
+                export DATA_MARKET_CONTRACT="$DATA_MARKET_CONTRACT"
+                export SNAPSHOT_CONFIG_REPO_BRANCH="$SNAPSHOT_CONFIG_BRANCH"
+                export SNAPSHOT_CONFIG_REPO_COMMIT="$SNAPSHOT_CONFIG_COMMIT"
+                export SNAPSHOTTER_COMPUTE_REPO_BRANCH="$SNAPSHOTTER_COMPUTE_BRANCH"
+                export SNAPSHOTTER_COMPUTE_REPO_COMMIT="$SNAPSHOTTER_COMPUTE_COMMIT"
+                export NAMESPACE="AAVEV3"
+                export SOURCE_CHAIN="$SOURCE_CHAIN"
+                # Update protocol state contract if found
+                if [ -n "$PROTOCOL_STATE_CONTRACT" ]; then
+                    if [ "$is_devnet" = "true" ]; then
+                        DEFAULT_DEVNET_PROTOCOL_STATE_CONTRACT="$PROTOCOL_STATE_CONTRACT"
+                    else
+                        DEFAULT_PROTOCOL_STATE_CONTRACT="$PROTOCOL_STATE_CONTRACT"
+                    fi
+                fi
             else
-                echo "Aave V3 selected"
-                export DATA_MARKET_CONTRACT="$MAINNET_AAVEV3_CONTRACT"
+                echo "⚠️  Could not fetch AAVEV3 config from GitHub, exiting..."
+                exit 1
             fi
-            export SNAPSHOT_CONFIG_REPO_BRANCH="eth_aavev3_lite_v2"
-            export SNAPSHOTTER_COMPUTE_REPO_BRANCH="eth_aavev3_lite"
-            export NAMESPACE="AAVEV3"
             ;;
         "2")
-            if [ "$is_devnet" = "true" ]; then
-                echo "Uniswap V2 selected for devnet"
-                export DATA_MARKET_CONTRACT="$DEVNET_UNISWAPV2_CONTRACT"
+            echo "Uniswap V2 selected for $chain_name"
+            local config_result=$(extract_chain_config "$chain_name" "UNISWAPV2")
+            if [ -n "$config_result" ]; then
+                parse_config_vars "$config_result"
+                export DATA_MARKET_CONTRACT="$DATA_MARKET_CONTRACT"
+                export SNAPSHOT_CONFIG_REPO_BRANCH="$SNAPSHOT_CONFIG_BRANCH"
+                export SNAPSHOT_CONFIG_REPO_COMMIT="$SNAPSHOT_CONFIG_COMMIT"
+                export SNAPSHOTTER_COMPUTE_REPO_BRANCH="$SNAPSHOTTER_COMPUTE_BRANCH"
+                export SNAPSHOTTER_COMPUTE_REPO_COMMIT="$SNAPSHOTTER_COMPUTE_COMMIT"
+                export NAMESPACE="UNISWAPV2"
+                export SOURCE_CHAIN="$SOURCE_CHAIN"
+                # Update protocol state contract if found
+                if [ -n "$PROTOCOL_STATE_CONTRACT" ]; then
+                    if [ "$is_devnet" = "true" ]; then
+                        DEFAULT_DEVNET_PROTOCOL_STATE_CONTRACT="$PROTOCOL_STATE_CONTRACT"
+                    else
+                        DEFAULT_PROTOCOL_STATE_CONTRACT="$PROTOCOL_STATE_CONTRACT"
+                    fi
+                fi
             else
-                echo "Uniswap V2 selected"
-                export DATA_MARKET_CONTRACT="$MAINNET_UNISWAPV2_CONTRACT"
+                echo "⚠️  Could not fetch UNISWAPV2 config from GitHub, exiting..."
+                exit 1
             fi
-            export SNAPSHOT_CONFIG_REPO_BRANCH="eth_uniswapv2-lite_v2"
-            export SNAPSHOTTER_COMPUTE_REPO_BRANCH="eth_uniswapv2_lite_v2"
-            export NAMESPACE="UNISWAPV2"
             ;;
         *)
             echo "❌ Invalid data market choice: $choice"
@@ -275,7 +534,9 @@ update_common_config() {
     update_or_append_var "PROTOCOL_STATE_CONTRACT" "$PROTOCOL_STATE_CONTRACT" "$env_file"
     update_or_append_var "DATA_MARKET_CONTRACT" "$DATA_MARKET_CONTRACT" "$env_file"
     update_or_append_var "SNAPSHOT_CONFIG_REPO_BRANCH" "$SNAPSHOT_CONFIG_REPO_BRANCH" "$env_file"
+    update_or_append_var "SNAPSHOT_CONFIG_REPO_COMMIT" "$SNAPSHOT_CONFIG_REPO_COMMIT" "$env_file"
     update_or_append_var "SNAPSHOTTER_COMPUTE_REPO_BRANCH" "$SNAPSHOTTER_COMPUTE_REPO_BRANCH" "$env_file"
+    update_or_append_var "SNAPSHOTTER_COMPUTE_REPO_COMMIT" "$SNAPSHOTTER_COMPUTE_REPO_COMMIT" "$env_file"
     update_or_append_var "FULL_NAMESPACE" "$FULL_NAMESPACE" "$env_file"
     update_or_append_var "DOCKER_NETWORK_NAME" "$DOCKER_NETWORK_NAME" "$env_file"
     update_or_append_var "CONNECTION_REFRESH_INTERVAL_SEC" "$CONNECTION_REFRESH_INTERVAL_SEC" "$env_file"
@@ -332,14 +593,22 @@ handle_override_mode() {
     if [[ "$override_branches_choice" =~ ^[Yy]$ ]]; then
         read -p "Enter SNAPSHOT_CONFIG_REPO_BRANCH [default: $DEFAULT_SNAPSHOT_CONFIG_REPO_BRANCH]: " snapshot_config_repo_branch_input
         export SNAPSHOT_CONFIG_REPO_BRANCH=${snapshot_config_repo_branch_input:-$DEFAULT_SNAPSHOT_CONFIG_REPO_BRANCH}
+        read -p "Enter SNAPSHOT_CONFIG_REPO_COMMIT [default: $DEFAULT_SNAPSHOT_CONFIG_REPO_COMMIT]: " snapshot_config_repo_commit_input
+        export SNAPSHOT_CONFIG_REPO_COMMIT=${snapshot_config_repo_commit_input:-$DEFAULT_SNAPSHOT_CONFIG_REPO_COMMIT}
         read -p "Enter SNAPSHOTTER_COMPUTE_REPO_BRANCH [default: $DEFAULT_SNAPSHOTTER_COMPUTE_REPO_BRANCH]: " snapshotter_compute_repo_branch_input
         export SNAPSHOTTER_COMPUTE_REPO_BRANCH=${snapshotter_compute_repo_branch_input:-$DEFAULT_SNAPSHOTTER_COMPUTE_REPO_BRANCH}
+        read -p "Enter SNAPSHOTTER_COMPUTE_REPO_COMMIT [default: $DEFAULT_SNAPSHOTTER_COMPUTE_REPO_COMMIT]: " snapshotter_compute_repo_commit_input
+        export SNAPSHOTTER_COMPUTE_REPO_COMMIT=${snapshotter_compute_repo_commit_input:-$DEFAULT_SNAPSHOTTER_COMPUTE_REPO_COMMIT}
     else
         export SNAPSHOT_CONFIG_REPO_BRANCH="$DEFAULT_SNAPSHOT_CONFIG_REPO_BRANCH"
+        export SNAPSHOT_CONFIG_REPO_COMMIT="$DEFAULT_SNAPSHOT_CONFIG_REPO_COMMIT"
         export SNAPSHOTTER_COMPUTE_REPO_BRANCH="$DEFAULT_SNAPSHOTTER_COMPUTE_REPO_BRANCH"
+        export SNAPSHOTTER_COMPUTE_REPO_COMMIT="$DEFAULT_SNAPSHOTTER_COMPUTE_REPO_COMMIT"
     fi
     echo "Selected SNAPSHOT_CONFIG_REPO_BRANCH: $SNAPSHOT_CONFIG_REPO_BRANCH"
+    echo "Selected SNAPSHOT_CONFIG_REPO_COMMIT: $SNAPSHOT_CONFIG_REPO_COMMIT"
     echo "Selected SNAPSHOTTER_COMPUTE_REPO_BRANCH: $SNAPSHOTTER_COMPUTE_REPO_BRANCH"
+    echo "Selected SNAPSHOTTER_COMPUTE_REPO_COMMIT: $SNAPSHOTTER_COMPUTE_REPO_COMMIT"
 
     # Determine target environment file
     export FULL_NAMESPACE="${POWERLOOM_CHAIN}-${NAMESPACE}-${SOURCE_CHAIN}"
@@ -396,7 +665,9 @@ handle_devnet_mode() {
     POWERLOOM_RPC_URL="$DEFAULT_DEVNET_POWERLOOM_RPC_URL"
     PROTOCOL_STATE_CONTRACT="$DEFAULT_DEVNET_PROTOCOL_STATE_CONTRACT"
     SNAPSHOT_CONFIG_REPO_BRANCH="$DEFAULT_DEVNET_SNAPSHOT_CONFIG_REPO_BRANCH"
+    SNAPSHOT_CONFIG_REPO_COMMIT="$DEFAULT_DEVNET_SNAPSHOT_CONFIG_REPO_COMMIT"
     SNAPSHOTTER_COMPUTE_REPO_BRANCH="$DEFAULT_DEVNET_SNAPSHOTTER_COMPUTE_REPO_BRANCH"
+    SNAPSHOTTER_COMPUTE_REPO_COMMIT="$DEFAULT_DEVNET_SNAPSHOTTER_COMPUTE_REPO_COMMIT"
     CONNECTION_REFRESH_INTERVAL_SEC="$DEFAULT_DEVNET_CONNECTION_REFRESH_INTERVAL_SEC"
     TELEGRAM_NOTIFICATION_COOLDOWN="$DEFAULT_DEVNET_TELEGRAM_NOTIFICATION_COOLDOWN"
     
@@ -500,11 +771,17 @@ create_new_default_env_file() {
 
     get_data_market_config "$DATA_MARKET_CONTRACT_CHOICE"
 
-    # Export remaining defaults
+    # Export all required configuration variables
     export POWERLOOM_CHAIN
     export SOURCE_CHAIN
+    export NAMESPACE
     export POWERLOOM_RPC_URL
     export PROTOCOL_STATE_CONTRACT
+    export DATA_MARKET_CONTRACT
+    export SNAPSHOT_CONFIG_REPO_BRANCH
+    export SNAPSHOT_CONFIG_REPO_COMMIT
+    export SNAPSHOTTER_COMPUTE_REPO_BRANCH
+    export SNAPSHOTTER_COMPUTE_REPO_COMMIT
     export CONNECTION_REFRESH_INTERVAL_SEC
     export TELEGRAM_NOTIFICATION_COOLDOWN
 
@@ -613,7 +890,9 @@ validate_environment() {
         "DATA_MARKET_CONTRACT"
         "PROTOCOL_STATE_CONTRACT"
         "SNAPSHOT_CONFIG_REPO_BRANCH"
+        "SNAPSHOT_CONFIG_REPO_COMMIT"
         "SNAPSHOTTER_COMPUTE_REPO_BRANCH"
+        "SNAPSHOTTER_COMPUTE_REPO_COMMIT"
         "FULL_NAMESPACE"
     )
     
@@ -627,14 +906,17 @@ validate_environment() {
 
 # Main execution flow
 main() {
-    # Check Docker daemon
-    if ! docker info >/dev/null 2>&1; then
+    # Parse command line arguments first to check for Docker mode
+    parse_arguments "$@"
+    
+    # Check Docker daemon (skip in Docker mode since we're running inside a container)
+    if [ "$DOCKER_MODE" != "true" ] && ! docker info >/dev/null 2>&1; then
         echo "❌ Docker daemon is not running"
         exit 1
     fi
 
-    # Parse command line arguments
-    parse_arguments "$@"
+    # Initialize configuration from GitHub
+    initialize_default_config
 
     if [ "$OVERRIDE_DEFAULTS_SCRIPT_FLAG" = "true" ]; then
         echo "🔔 OVERRIDE_DEFAULTS_SCRIPT_FLAG is true"
@@ -654,15 +936,17 @@ main() {
     # Handle credential updates
     handle_credential_updates
     
-    # Final source and setup
+    # Final validation
     if [ ! -f "$ENV_FILE_PATH" ]; then
-        echo "❌ Error: Environment file $ENV_FILE_PATH not found before final sourcing. This should not happen. Exiting."
+        echo "❌ Error: Environment file $ENV_FILE_PATH not found before final validation. This should not happen. Exiting."
         exit 1
     fi
-    source "$ENV_FILE_PATH"
 
     # Set default optional variables
     set_default_optional_variables "$ENV_FILE_PATH"
+    
+    # Source the environment file to ensure all variables are available for validation
+    source "$ENV_FILE_PATH"
     
     # Validate environment
     validate_environment
@@ -672,6 +956,12 @@ main() {
 
     if [ "$SETUP_COMPLETE" = true ]; then
         echo "✅ Configuration complete. Environment file ready at $ENV_FILE_PATH"
+        
+        # Write the env file path to the result file for the build script (if result file exists)
+        if [ -n "$ENV_FILE_PATH" ] && [ -w "/tmp/setup_result" ] 2>/dev/null; then
+            echo "$ENV_FILE_PATH" > /tmp/setup_result
+            echo "🔗 Reported env file to build script: $ENV_FILE_PATH"
+        fi
     else
         echo "❌ Configuration incomplete or encountered errors. Please review messages and $ENV_FILE_PATH."
         exit 1
