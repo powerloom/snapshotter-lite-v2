@@ -15,9 +15,13 @@
   - [Using Docker](#using-docker)
     - [Setting up multi data market release for the first time](#setting-up-multi-data-market-release-for-the-first-time)
     - [Running from a previously configured multi data market release](#running-from-a-previously-configured-multi-data-market-release)
+    - [Quick Devnet Setup](#quick-devnet-setup)
+      - [Supported Data Markets on Devnet](#supported-data-markets-on-devnet)
+    - [Overriding Default .env Generation](#overriding-default-env-generation)
     - [Simulation submissions](#simulation-submissions)
 - [Monitoring and Debugging](#monitoring-and-debugging)
   - [Monitoring](#monitoring)
+    - [Enhanced Monitoring with Multiple Nodes (Optional)](#enhanced-monitoring-with-multiple-nodes-optional)
   - [Debugging](#debugging)
 - [For Contributors](#for-contributors)
 - [Case Studies](#case-studies)
@@ -342,6 +346,49 @@ To enable Telegram reporting for snapshotter issues:
 2. Start the bot by typing the `/start` command in the chat. You will receive a response containing your `Chat ID` for the bot.
 3. Enter the `Chat ID` when prompted on node startup.
 4. You will now receive an error report whenever your node fails to process an epoch or snapshot.
+
+#### Enhanced Monitoring with Multiple Nodes (Optional)
+
+For operators managing multiple snapshotter nodes, you can organize alerts using topic-based monitoring within a single Telegram group. This feature allows you to separate and categorize alerts from different nodes or environments (e.g., mainnet vs. devnet, different data markets).
+
+**Benefits:**
+- **Centralized Management**: Monitor all your nodes from one Telegram group
+- **Organized Alerts**: Separate topics for different nodes/environments
+- **Easy Identification**: Quickly identify which node needs attention
+- **Scalable**: Add new nodes without creating additional groups
+
+**Setup Instructions:**
+
+1. **Create a Group with Topics Support**
+   - Create a new Telegram group
+   - Add [@PowerloomReportingBot](https://t.me/PowerloomReportingBot) to the group
+
+2. **Enable Topics Feature**
+   - Go to group settings → "Edit Group"
+   - Enable "Topics" feature
+   - This converts your group into a forum-style group with separate topic threads
+
+3. **Create Topic Threads**
+   - Create a new topic for each node you want to monitor
+   - Use descriptive names like:
+     - "Mainnet-UniswapV2-Node"
+     - "Devnet-AaveV3-Node" 
+     - "Production-Node-1", etc.
+
+4. **Get Topic Configuration**
+   - In the specific topic thread, send `/thread_info` to [@PowerloomReportingBot](https://t.me/PowerloomReportingBot)
+   - The bot will respond with:
+     ```
+     Chat ID: -1001234567890
+     Topic ID: 123
+     ```
+
+5. **Configure Your Node**
+   - When prompted during node setup, enter:
+     - **Chat ID**: The chat ID from step 4
+     - **Topic ID**: The topic ID from step 4 (optional - leave empty for general group messages)
+
+> **💡 Pro Tip**: Keep a record of your topic IDs and their corresponding nodes for easy reference when scaling your infrastructure.
 
 ### Debugging
 Usually the easiest way to fix node related issues is to restart the node. If you're facing issues with the node, you can try going through the logs present in the `logs` directory. If you're unable to find the issue, you can reach out to us on [Discord](https://powerloom.io/discord) and we will be happy to help you out.
