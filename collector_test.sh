@@ -29,26 +29,28 @@ hosts=("localhost" "127.0.0.1" "0.0.0.0")
 test_ping=false
 test_namespace=false
 
-# Test port connectivity
-if command -v nc &> /dev/null; then
-    test_command="nc -z"
-    for host in "${hosts[@]}"; do
-        echo "  ⏳ Testing ${host}:${LOCAL_COLLECTOR_PORT}"
-        if ${test_command} "${host}" "${LOCAL_COLLECTOR_PORT}" 2>/dev/null; then
+# Test port connectivity using nc/netcat if available, otherwise use pure bash
+for host in "${hosts[@]}"; do
+    echo "  ⏳ Testing ${host}:${LOCAL_COLLECTOR_PORT}"
+    
+    if command -v nc &> /dev/null; then
+        if nc -z "${host}" "${LOCAL_COLLECTOR_PORT}" 2>/dev/null; then
             test_ping=true
             break
         fi
-    done
-else
-    test_command="curl -s --connect-timeout 5"
-    for host in "${hosts[@]}"; do
-        echo "  ⏳ Testing ${host}:${LOCAL_COLLECTOR_PORT}"
-        if $test_command "${host}:${LOCAL_COLLECTOR_PORT}" 2>/dev/null; then
+    elif command -v netcat &> /dev/null; then
+        if netcat -z "${host}" "${LOCAL_COLLECTOR_PORT}" 2>/dev/null; then
             test_ping=true
             break
         fi
-    done
-fi
+    else
+        # Pure bash TCP connection test - available on all systems
+        if timeout 1 bash -c "</dev/tcp/${host}/${LOCAL_COLLECTOR_PORT}" 2>/dev/null; then
+            test_ping=true
+            break
+        fi
+    fi
+done
 
 # Test container status
 container_name="snapshotter-lite-local-collector-${FULL_NAMESPACE}"
@@ -66,7 +68,18 @@ if [ "$test_ping" = true ] && [ "$test_namespace" = true ]; then
 else
     echo "⚠️  No active collector found - searching for available ports..."
     for port in {50051..51050}; do
-        if ! nc -z localhost $port 2>/dev/null; then
+        port_is_free=false
+        if [[ "$PORT_CHECK_CMD" == *"curl"* ]]; then
+            if ! $PORT_CHECK_CMD "localhost:$port" 2>/dev/null; then
+                port_is_free=true
+            fi
+        else
+            if ! $PORT_CHECK_CMD "localhost" "$port" 2>/dev/null; then
+                port_is_free=true
+            fi
+        fi
+        
+        if [ "$port_is_free" = true ]; then
             echo "✅ Found available port: $port"
             sed -i".backup" "s/^LOCAL_COLLECTOR_PORT=.*/LOCAL_COLLECTOR_PORT=${port}/" "${ENV_FILE}"
             break
