@@ -347,6 +347,7 @@ To enable Telegram reporting for snapshotter issues:
 3. Enter the `Chat ID` when prompted on node startup.
 4. You will now receive an error report whenever your node fails to process an epoch or snapshot.
 
+---
 #### Enhanced Monitoring with Multiple Nodes (Optional)
 
 For operators managing multiple snapshotter nodes, you can organize alerts using topic-based monitoring within a single Telegram group. This feature allows you to separate and categorize alerts from different nodes or environments (e.g., mainnet vs. devnet, different data markets).
