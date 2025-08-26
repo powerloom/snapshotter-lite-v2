@@ -31,6 +31,9 @@ docker run --rm -it \
     snapshotter-lite-setup:latest \
     bash -c "./configure-environment.sh $SETUP_ARGS --docker-mode"
 
+# Remove the setup container image
+docker rmi snapshotter-lite-setup:latest
+
 # Check if setup was successful by reading the result file
 if [ -f "$SETUP_RESULT_FILE" ] && [ -s "$SETUP_RESULT_FILE" ]; then
     SELECTED_ENV_FILE=$(cat "$SETUP_RESULT_FILE")
