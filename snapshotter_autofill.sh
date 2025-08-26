@@ -76,6 +76,7 @@ export ipfs_api_secret="${IPFS_API_SECRET:-}"
 export local_collector_port="${LOCAL_COLLECTOR_PORT:-50051}"
 export telegram_reporting_url="${TELEGRAM_REPORTING_URL:-}"
 export telegram_chat_id="${TELEGRAM_CHAT_ID:-}"
+export telegram_message_thread_id="${TELEGRAM_MESSAGE_THREAD_ID:-}"
 export telegram_notification_cooldown="${TELEGRAM_NOTIFICATION_COOLDOWN:-}"
 
 # If IPFS_URL is empty, clear IPFS API key and secret
@@ -121,5 +122,6 @@ sed -i'.backup' "s#local-collector-port#$local_collector_port#" config/settings.
 sed -i'.backup' "s#https://telegram-reporting-url#$telegram_reporting_url#" config/settings.json
 sed -i'.backup' "s#telegram-chat-id#$telegram_chat_id#" config/settings.json
 sed -i'.backup' "s#telegram-notification-cooldown#$telegram_notification_cooldown#" config/settings.json
+sed -i'.backup' "s#telegram-message-thread-id#$telegram_message_thread_id#" config/settings.json
 
 echo 'settings has been populated!'
