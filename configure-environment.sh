@@ -201,7 +201,7 @@ extract_chain_config() {
 
 # Function to fetch markets configuration from GitHub
 fetch_markets_config() {
-    echo "🌐 Fetching latest configuration from GitHub..."
+    echo "🌐 Fetching latest protocol state and data market configuration from GitHub..."
     
     # Try to fetch the configuration with timeout
     if command -v curl >/dev/null 2>&1; then
@@ -227,7 +227,7 @@ fetch_markets_config() {
         fi
     fi
     
-    echo "✅ Successfully fetched configuration from GitHub."
+    echo "✅ Successfully fetched protocol state and data market configurations from Powerloom's curated data markets GitHub repository."
     return 0
 }
 
