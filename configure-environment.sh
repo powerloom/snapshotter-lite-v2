@@ -713,7 +713,6 @@ handle_devnet_mode() {
     fi
     
     update_common_config "$ENV_FILE_PATH"
-    update_or_append_var "OVERRIDE_DEFAULTS" "true" "$ENV_FILE_PATH"
     echo "✅ $ENV_FILE_PATH configured for devnet."
 }
 
