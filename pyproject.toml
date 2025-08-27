@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "Powerloom Snapshotter"
-version = "0.1.0"
+version = "2.11.0"
 description = ""
 authors = ["Powerloom, Inc."]
 license = "Apache-2.0"
@@ -27,6 +27,7 @@ ipfs-cid = "^1.0.0"
 eip712-structs = {git = "https://github.com/powerloom/py-eip712-structs"}
 protobuf = "^5.28.2"
 aiofiles = "^24.1.0"
+toml = "^0.10.2"
 
 
 [build-system]

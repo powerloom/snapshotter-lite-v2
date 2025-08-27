@@ -41,6 +41,9 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+# Print the version of the snapshotter
+poetry run python -m snapshotter.version
+
 # Continue with existing steps
 poetry run python -m snapshotter.snapshotter_id_ping
 ret_status=$?
