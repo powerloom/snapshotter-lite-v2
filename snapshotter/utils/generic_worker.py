@@ -35,6 +35,7 @@ from snapshotter.utils.models.proto.snapshot_submission.submission_pb2 import Sn
 from snapshotter.utils.rpc import RpcHelper
 
 import grpclib
+from snapshotter.version import __version__
 
 
 class EIPRequest(EIP712Struct):
@@ -154,7 +155,7 @@ class GenericAsyncWorker:
         self.logger.debug(
             'Snapshot submission creation with request: {}', request_msg,
         )
-        msg = SnapshotSubmission(request=request_msg, signature=signature.hex(), header=current_block_hash, dataMarket=settings.data_market, nodeVersion=settings.node_version)
+        msg = SnapshotSubmission(request=request_msg, signature=signature.hex(), header=current_block_hash, dataMarket=settings.data_market, nodeVersion=__version__)
         self.logger.debug(
             'Snapshot submission created: {}', msg,
         )
