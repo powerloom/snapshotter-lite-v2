@@ -23,7 +23,7 @@ env:
 jobs:
   build:
 
-    runs-on: warp-ubuntu-latest-x64-4x
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
@@ -48,6 +48,10 @@ jobs:
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
+      # Workaround: https://github.com/docker/build-push-action/issues/461
+      - name: Setup Docker buildx
+        uses: docker/setup-buildx-action@v3
+
       # Login against a Docker registry except on PR
       # https://github.com/docker/login-action
       - name: Log into registry ${{ env.REGISTRY }}
@@ -66,11 +70,11 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
 
-      # Build and push Docker image with WarpBuild Docker builder
-      # https://docs.warpbuild.com/ci/docker-builders
+      # Build and push Docker image with Buildx (don't push on PR)
+      # https://github.com/docker/build-push-action
       - name: Build and push Docker image
         id: build-and-push
-        uses: Warpbuilds/build-push-action@v6
+        uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64,linux/arm64
