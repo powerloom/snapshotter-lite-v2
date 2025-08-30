@@ -9,6 +9,7 @@ NO_COLLECTOR=false
 OVERRIDE_DEFAULTS_SCRIPT_FLAG=false
 DEVNET_MODE=false
 DOCKER_MODE=false
+RESULT_FILE=""
 
 # GitHub configuration URL
 MARKETS_CONFIG_URL="https://raw.githubusercontent.com/powerloom/curated-datamarkets/main/sources.json"
@@ -424,6 +425,10 @@ parse_arguments() {
             --docker-mode)
                 DOCKER_MODE=true
                 shift
+                ;;
+            --result-file)
+                RESULT_FILE=$2
+                shift 2
                 ;;
             *)
                 shift
@@ -862,6 +867,7 @@ set_default_optional_variables() {
         "STREAM_WRITE_TIMEOUT_MS:5000"
         "MAX_WRITE_RETRIES:3"
         "MAX_CONCURRENT_WRITES:4"
+        "TELEGRAM_MESSAGE_THREAD_ID:<telegram-thread-id>"
     )
     
     for var_def in "${optional_vars[@]}"; do
@@ -956,9 +962,9 @@ main() {
     if [ "$SETUP_COMPLETE" = true ]; then
         echo "✅ Configuration complete. Environment file ready at $ENV_FILE_PATH"
         
-        # Write the env file path to the result file for the build script (if result file exists)
-        if [ -n "$ENV_FILE_PATH" ] && [ -w "/tmp/setup_result" ] 2>/dev/null; then
-            echo "$ENV_FILE_PATH" > /tmp/setup_result
+        # Write the env file path to the result file for the build script
+        if [ -n "$RESULT_FILE" ]; then
+            echo "$ENV_FILE_PATH" > "$RESULT_FILE"
             echo "🔗 Reported env file to build script: $ENV_FILE_PATH"
         fi
     else
