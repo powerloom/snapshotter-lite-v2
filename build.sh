@@ -20,16 +20,17 @@ echo "🏗️ Building setup container..."
 docker build -f Dockerfile.setup -t snapshotter-lite-setup:latest .
 
 # Create a temporary file to capture the env file path from setup
-SETUP_RESULT_FILE=$(mktemp)
+SETUP_RESULT_DIR=$(mktemp -d "$(pwd)/setup_result.XXXXXX")
+SETUP_RESULT_FILE="$SETUP_RESULT_DIR/setup_result"
 
 # Run setup container directly
 echo "🔧 Running setup container to configure environment..."
 docker run --rm -it \
     -v "$(pwd):/app" \
-    -v "$SETUP_RESULT_FILE:/tmp/setup_result" \
+    -v "$SETUP_RESULT_DIR:/tmp/setup_result_dir" \
     -w /app \
     snapshotter-lite-setup:latest \
-    bash -c "./configure-environment.sh $SETUP_ARGS --docker-mode"
+    bash -c "./configure-environment.sh $SETUP_ARGS --docker-mode --result-file /tmp/setup_result_dir/setup_result"
 
 # Remove the setup container image
 docker rmi snapshotter-lite-setup:latest
@@ -37,7 +38,7 @@ docker rmi snapshotter-lite-setup:latest
 # Check if setup was successful by reading the result file
 if [ -f "$SETUP_RESULT_FILE" ] && [ -s "$SETUP_RESULT_FILE" ]; then
     SELECTED_ENV_FILE=$(cat "$SETUP_RESULT_FILE")
-    rm -f "$SETUP_RESULT_FILE"
+    rm -rf "$SETUP_RESULT_DIR"
     
     if [ -n "$SELECTED_ENV_FILE" ] && [ -f "$SELECTED_ENV_FILE" ]; then
         echo "ℹ️ Setup container configured: $SELECTED_ENV_FILE"
@@ -49,7 +50,7 @@ if [ -f "$SETUP_RESULT_FILE" ] && [ -s "$SETUP_RESULT_FILE" ]; then
     fi
 else
     echo "❌ Setup container did not complete successfully or failed to report results."
-    rm -f "$SETUP_RESULT_FILE"
+    rm -rf "$SETUP_RESULT_DIR"
     exit 1
 fi
 
