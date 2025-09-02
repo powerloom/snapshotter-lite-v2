@@ -867,7 +867,7 @@ set_default_optional_variables() {
         "STREAM_WRITE_TIMEOUT_MS:5000"
         "MAX_WRITE_RETRIES:3"
         "MAX_CONCURRENT_WRITES:4"
-        "TELEGRAM_MESSAGE_THREAD_ID:<telegram-thread-id>"
+        "TELEGRAM_MESSAGE_THREAD_ID:"
     )
     
     for var_def in "${optional_vars[@]}"; do
