@@ -25,8 +25,8 @@ from snapshotter.utils.models.data_models import EpochReleasedEvent
 from snapshotter.utils.models.data_models import SnapshotterIssue
 from snapshotter.utils.models.data_models import SnapshotterReportState
 from snapshotter.utils.models.message_models import TelegramEpochProcessingReportMessage
-from snapshotter.utils.rpc import get_event_sig_and_abi
-from snapshotter.utils.rpc import RpcHelper
+from rpc_helper.rpc import get_event_sig_and_abi
+from rpc_helper.rpc import RpcHelper
 from pathlib import Path
 
 
@@ -97,6 +97,8 @@ class EventDetectorProcess(multiprocessing.Process):
         """
         self.rpc_helper = RpcHelper(rpc_settings=settings.powerloom_chain_rpc)
         self._source_rpc_helper = RpcHelper(rpc_settings=settings.rpc)
+        await self.rpc_helper.init()
+        await self._source_rpc_helper.init()
 
         self.processor_distributor = ProcessorDistributor()
 
@@ -580,7 +582,7 @@ class EventDetectorProcess(multiprocessing.Process):
                 self._detect_events(),
             )
         except Exception as e:
-            self._logger.error(f"Fatal error in event loop: {e}")
+            self._logger.opt(exception=True).error(f"Fatal error in event loop: {e}")
             os._exit(1)
 
 

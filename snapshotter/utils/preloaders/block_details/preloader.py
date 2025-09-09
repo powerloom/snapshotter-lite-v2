@@ -2,7 +2,7 @@ from snapshotter.utils.callback_helpers import GenericPreloader
 from snapshotter.utils.default_logger import logger
 from snapshotter.utils.models.data_models import PreloaderResult
 from snapshotter.utils.models.message_models import EpochBase
-from snapshotter.utils.rpc import RpcHelper
+from rpc_helper.rpc import RpcHelper
 from snapshotter.utils.snapshot_utils import get_block_details_in_block_range
 
 

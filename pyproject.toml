@@ -12,13 +12,12 @@ python = "^3.10.13"
 importlib = "^1.0.4"
 aiohttp = "^3.8.5"
 web3 = "^6.13.0"
-tenacity = "^8.2.2"
+tenacity = "^9.1.2"
 uvicorn = "^0.20.0"
 multiaddr = "^0.0.9"
 uvloop = "^0.19.0"
 loguru = "^0.7.0"
-httpx = "^0.24.1"
-ifps-client = {git = "https://git@github.com/PowerLoom/py-ipfs-client.git"}
+httpx = "^0.27.1"
 coincurve = "^18.0.0"
 grpclib = {extras = ["protobuf"], version = "^0.4.7"}
 grpcio-tools = "^1.62.1"
@@ -28,7 +27,8 @@ eip712-structs = {git = "https://github.com/powerloom/py-eip712-structs"}
 protobuf = "^5.28.2"
 aiofiles = "^24.1.0"
 toml = "^0.10.2"
-
+ifps-client = {git = "https://git@github.com/PowerLoom/py-ipfs-client.git"}
+rpc_helper = {git = "https://git@github.com/PowerLoom/rpc-helper.git", branch = "13-optional-rate-limiting-for-rpchelper"}
 
 [build-system]
 requires = ["poetry-core"]

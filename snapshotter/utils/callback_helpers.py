@@ -17,7 +17,7 @@ from snapshotter.utils.models.message_models import SnapshotProcessMessage
 from snapshotter.utils.models.message_models import TelegramEpochProcessingReportMessage
 from snapshotter.utils.models.message_models import TelegramMessage
 from snapshotter.utils.models.message_models import TelegramSnapshotterReportMessage
-from snapshotter.utils.rpc import RpcHelper
+from rpc_helper.rpc import RpcHelper
 
 # setup logger
 helper_logger = logger.bind(module='Callback|Helpers')
@@ -181,7 +181,6 @@ class GenericPreloader(ABC):
 
         Args:
             epoch (EpochBase): The epoch message.
-            redis_conn (aioredis.Redis): Redis connection.
             rpc_helper (RpcHelper): RPC helper instance.
         """
         pass

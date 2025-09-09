@@ -32,7 +32,7 @@ from snapshotter.utils.models.proto.snapshot_submission.submission_grpc import S
 from snapshotter.utils.models.proto.snapshot_submission.submission_pb2 import Request
 from snapshotter.utils.models.proto.snapshot_submission.submission_pb2 import SnapshotSubmission
 
-from snapshotter.utils.rpc import RpcHelper
+from rpc_helper.rpc import RpcHelper
 
 import grpclib
 from snapshotter.version import __version__
@@ -269,7 +269,8 @@ class GenericAsyncWorker:
         """
         self._rpc_helper = RpcHelper(rpc_settings=settings.rpc)
         self._anchor_rpc_helper = RpcHelper(rpc_settings=settings.powerloom_chain_rpc)
-
+        await self._rpc_helper.init()
+        await self._anchor_rpc_helper.init()
         self.protocol_state_contract = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
             address=Web3.to_checksum_address(
                 self.protocol_state_contract_address,
@@ -280,7 +281,7 @@ class GenericAsyncWorker:
             ),
         )
 
-        self._anchor_chain_id = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.chain_id
+        self._anchor_chain_id = await self._anchor_rpc_helper.get_current_node()['web3_client'].eth.chain_id
         self._keccak_hash = lambda x: sha3.keccak_256(x).digest()
         self._domain_separator = make_domain(
             name='PowerloomProtocolContract', version='0.1', chainId=self._anchor_chain_id,
@@ -337,10 +338,10 @@ class GenericAsyncWorker:
         try:
             source_block_time = await self._anchor_rpc_helper.web3_call(
                 [
-                    self.protocol_state_contract.functions.SOURCE_CHAIN_BLOCK_TIME(
-                        Web3.to_checksum_address(settings.data_market),
-                    ),
+                    ("SOURCE_CHAIN_BLOCK_TIME", [Web3.to_checksum_address(settings.data_market)]),
                 ],
+                contract_addr=self.protocol_state_contract.address,
+                abi=self.protocol_state_contract.abi,
             )
         except Exception as e:
             self.logger.exception(
@@ -353,7 +354,11 @@ class GenericAsyncWorker:
             self.logger.debug('Set source chain block time to {}', self._source_chain_block_time)
         try:
             epoch_size = await self._anchor_rpc_helper.web3_call(
-                [self.protocol_state_contract.functions.EPOCH_SIZE(Web3.to_checksum_address(settings.data_market))],
+                [
+                    ("EPOCH_SIZE", [Web3.to_checksum_address(settings.data_market)]),
+                ],
+                contract_addr=self.protocol_state_contract.address,
+                abi=self.protocol_state_contract.abi,
             )
         except Exception as e:
             self.logger.exception(

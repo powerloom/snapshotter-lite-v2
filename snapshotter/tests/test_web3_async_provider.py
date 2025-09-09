@@ -7,7 +7,7 @@ from web3 import Web3
 
 from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import logger
-from snapshotter.utils.rpc import RpcHelper
+from rpc_helper.rpc import RpcHelper
 
 
 async def test_web3_async_call():
@@ -22,9 +22,9 @@ async def test_web3_async_call():
     )
     # print(await contract.functions.retrieve().call())
     tasks = [
-        contract_obj.functions.retrieve(),
+        ("retrieve", []),
     ]
-    result = await rpc_helper.web3_call(tasks)
+    result = await rpc_helper.web3_call(tasks, contract_addr=contract_obj.address, abi=contract_abi)
     logger.debug('Retrieve: {}', result)
 
 

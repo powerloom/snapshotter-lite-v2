@@ -1,6 +1,6 @@
 from snapshotter.settings.config import settings
 from snapshotter.utils.default_logger import logger
-from snapshotter.utils.rpc import RpcHelper
+from rpc_helper.rpc import RpcHelper
 
 snapshot_util_logger = logger.bind(module='Powerloom|Snapshotter|SnapshotUtilLogger')
 
@@ -16,16 +16,12 @@ async def get_block_details_in_block_range(
     Args:
         from_block (int): The starting block number.
         to_block (int): The ending block number.
-        redis_conn (aioredis.Redis): The Redis connection object.
         rpc_helper (RpcHelper): The RPC helper object.
 
     Returns:
         dict: A dictionary containing block details for each block number in the given range.
     """
     try:
-
-
-        # check if we have cached value for each block number
 
         rpc_batch_block_details = await rpc_helper.batch_eth_get_block(from_block, to_block)
 

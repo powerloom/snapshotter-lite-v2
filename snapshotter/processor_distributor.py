@@ -23,7 +23,7 @@ from snapshotter.utils.models.data_models import SnapshotFinalizedEvent
 from snapshotter.utils.models.data_models import SnapshottersUpdatedEvent
 from snapshotter.utils.models.message_models import EpochBase
 from snapshotter.utils.models.message_models import SnapshotProcessMessage
-from snapshotter.utils.rpc import RpcHelper
+from rpc_helper.rpc import RpcHelper
 from snapshotter.utils.snapshot_worker import SnapshotAsyncWorker
 
 
@@ -67,9 +67,10 @@ class ProcessorDistributor:
         Initializes the RpcHelper instance if it is not already initialized.
         """
         if not self._rpc_helper:
-            self._rpc_helper = RpcHelper()
+            self._rpc_helper = RpcHelper(rpc_settings=settings.rpc)
             self._anchor_rpc_helper = RpcHelper(rpc_settings=settings.powerloom_chain_rpc)
-
+            await self._anchor_rpc_helper.init()
+            await self._rpc_helper.init()
 
     async def _init_preloader_compute_mapping(self):
         """
@@ -101,9 +102,8 @@ class ProcessorDistributor:
             self._logger = logger.bind(
                 module='ProcessDistributor',
             )
-            self._anchor_rpc_helper = RpcHelper(
-                rpc_settings=settings.powerloom_chain_rpc,
-            )
+            await self._init_rpc_helper()
+
             protocol_abi = read_json_file(settings.protocol_state.abi, self._logger)
             self._logger.info('Protocol state address: {}', settings.protocol_state.address)
             self._protocol_state_contract = self._anchor_rpc_helper.get_current_node()['web3_client'].eth.contract(
@@ -113,7 +113,7 @@ class ProcessorDistributor:
                 abi=protocol_abi,
             )
             try:
-                source_block_time = self._protocol_state_contract.functions.SOURCE_CHAIN_BLOCK_TIME(Web3.to_checksum_address(settings.data_market)).call()
+                source_block_time = await self._protocol_state_contract.functions.SOURCE_CHAIN_BLOCK_TIME(Web3.to_checksum_address(settings.data_market)).call()
             except Exception as e:
                 self._logger.error(
                     'Exception in querying protocol state for source chain block time: {}',
@@ -124,7 +124,7 @@ class ProcessorDistributor:
                 self._logger.debug('Set source chain block time to {}', self._source_chain_block_time)
 
             try:
-                epoch_size = self._protocol_state_contract.functions.EPOCH_SIZE(Web3.to_checksum_address(settings.data_market)).call()
+                epoch_size = await self._protocol_state_contract.functions.EPOCH_SIZE(Web3.to_checksum_address(settings.data_market)).call()
             except Exception as e:
                 self._logger.error(
                     'Exception in querying protocol state for epoch size: {}',
@@ -134,7 +134,7 @@ class ProcessorDistributor:
                 self._epoch_size = epoch_size
 
             try:
-                self._current_day = self._protocol_state_contract.functions.dayCounter(Web3.to_checksum_address(settings.data_market)).call()
+                self._current_day = await self._protocol_state_contract.functions.dayCounter(Web3.to_checksum_address(settings.data_market)).call()
 
             except Exception as e:
                 self._logger.info("{} {}".format(self._protocol_state_contract, settings.data_market))
@@ -143,7 +143,6 @@ class ProcessorDistributor:
                     e,
                 )
 
-            await self._init_rpc_helper()
             await self._load_projects_metadata()
             await self._init_preloader_compute_mapping()
             await self.snapshot_worker.init_worker()
