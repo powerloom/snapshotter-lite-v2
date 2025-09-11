@@ -2731,7 +2731,7 @@ web3 = "^6.17.1"
 type = "git"
 url = "https://git@github.com/PowerLoom/rpc-helper.git"
 reference = "13-optional-rate-limiting-for-rpchelper"
-resolved_reference = "413dc30d40ffd378462e6864916ed01af6f43d6e"
+resolved_reference = "24c7bb313a26a7eaafd46087178f60e65db1ce3c"
 
 [[package]]
 name = "rpds-py"
