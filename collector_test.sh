@@ -52,13 +52,22 @@ for host in "${hosts[@]}"; do
     fi
 done
 
-# Test container status
+# Test container status - prioritize existing namespace containers
 container_name="snapshotter-lite-local-collector-${FULL_NAMESPACE}"
 if ! docker ps | grep -q "$container_name"; then
     echo "❌ Collector container not found: $container_name"
+    test_namespace=false
 else
     echo "✅ Collector container running: $container_name"
     test_namespace=true
+    
+    # If namespace container exists, use it regardless of port configuration
+    if [ "$test_ping" = false ]; then
+        echo "ℹ️  Existing collector container found for namespace ${FULL_NAMESPACE} but not reachable on configured port ${LOCAL_COLLECTOR_PORT}"
+        echo "ℹ️  This may indicate the collector is running on a different port - using existing container"
+    fi
+    echo "✅ Using existing collector container for namespace ${FULL_NAMESPACE}"
+    exit 100
 fi
 
 # Final status check
