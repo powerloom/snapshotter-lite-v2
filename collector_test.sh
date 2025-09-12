@@ -63,27 +63,48 @@ fi
 
 # Final status check
 if [ "$test_ping" = true ] && [ "$test_namespace" = true ]; then
-    echo "✅ Collector is running and reachable"
+    echo "✅ Collector is running and reachable on port ${LOCAL_COLLECTOR_PORT} and namespace ${FULL_NAMESPACE}"
     exit 100
 else
-    echo "⚠️  No active collector found - searching for available ports..."
-    for port in {50051..51050}; do
-        port_is_free=false
-        if [[ "$PORT_CHECK_CMD" == *"curl"* ]]; then
-            if ! $PORT_CHECK_CMD "localhost:$port" 2>/dev/null; then
-                port_is_free=true
+    echo "⚠️  No active collector found"
+    
+    # Only search for alternative port if configured port is in use (test_ping=true)
+    if [ "$test_ping" = true ]; then
+        echo "⚠️  Configured port ${LOCAL_COLLECTOR_PORT} is in use - searching for other available ports..."
+        for port in {50051..51050}; do
+            if [ "$port" = "$LOCAL_COLLECTOR_PORT" ]; then
+                continue  # Skip the port we know is in use
             fi
-        else
-            if ! $PORT_CHECK_CMD "localhost" "$port" 2>/dev/null; then
-                port_is_free=true
+            
+            port_is_free=true
+            for host in "${hosts[@]}"; do
+                if command -v nc &> /dev/null; then
+                    if nc -z "${host}" "${port}" 2>/dev/null; then
+                        port_is_free=false
+                        break
+                    fi
+                elif command -v netcat &> /dev/null; then
+                    if netcat -z "${host}" "${port}" 2>/dev/null; then
+                        port_is_free=false
+                        break
+                    fi
+                else
+                    if timeout 1 bash -c "</dev/tcp/${host}/${port}" 2>/dev/null; then
+                        port_is_free=false
+                        break
+                    fi
+                fi
+            done
+            
+            if [ "$port_is_free" = true ]; then
+                echo "✅ Found available port: $port (replacing conflicting configured port ${LOCAL_COLLECTOR_PORT}) for namespace ${FULL_NAMESPACE}"
+                sed -i".backup" "s/^LOCAL_COLLECTOR_PORT=.*/LOCAL_COLLECTOR_PORT=${port}/" "${ENV_FILE}"
+                break
             fi
-        fi
-        
-        if [ "$port_is_free" = true ]; then
-            echo "✅ Found available port: $port"
-            sed -i".backup" "s/^LOCAL_COLLECTOR_PORT=.*/LOCAL_COLLECTOR_PORT=${port}/" "${ENV_FILE}"
-            break
-        fi
-    done
+        done
+    else
+        echo "✅ Configured port ${LOCAL_COLLECTOR_PORT} is available for namespace ${FULL_NAMESPACE} - will use it for new collector"
+    fi
+    
     exit 101
 fi
