@@ -58,15 +58,31 @@ if ! docker ps | grep -q "$container_name"; then
     echo "❌ Collector container not found: $container_name"
     test_namespace=false
 else
-    echo "✅ Collector container running: $container_name"
+    echo "✅ Collector container already running for namespace ${FULL_NAMESPACE}: $container_name"
     test_namespace=true
     
     # If namespace container exists, use it regardless of port configuration
     if [ "$test_ping" = false ]; then
         echo "ℹ️  Existing collector container found for namespace ${FULL_NAMESPACE} but not reachable on configured port ${LOCAL_COLLECTOR_PORT}"
-        echo "ℹ️  This may indicate the collector is running on a different port - using existing container"
+        echo "ℹ️  Detecting actual port used by running collector $container_name..."
+        
+        # Get all port mappings from the running container to find the actual port
+        actual_port=$(docker port "$container_name" 2>/dev/null | grep '/tcp' | head -1 | cut -d':' -f2)
+        
+        if [ -n "$actual_port" ] && [ "$actual_port" != "$LOCAL_COLLECTOR_PORT" ]; then
+            echo "ℹ️  Collector $container_name is running on port $actual_port, updating env file"
+            sed -i".backup" "s/^LOCAL_COLLECTOR_PORT=.*/LOCAL_COLLECTOR_PORT=${actual_port}/" "${ENV_FILE}"
+            export LOCAL_COLLECTOR_PORT="$actual_port"
+        elif [ -z "$actual_port" ]; then
+            echo "❌ FATAL: Could not detect port for existing collector container ${container_name}"
+            echo "❌ Cannot proceed: snapshotter won't know which port to connect to, and spawning a new collector will cause container name conflicts"
+            echo "❌ Please manually stop the existing collector or fix its port configuration"
+            exit 1
+        else
+            echo "ℹ️  Collector $container_name confirmed running on configured port ${LOCAL_COLLECTOR_PORT}"
+        fi
     fi
-    echo "✅ Using existing collector container for namespace ${FULL_NAMESPACE}"
+    echo "✅ Using existing collector container for namespace ${FULL_NAMESPACE} on port ${LOCAL_COLLECTOR_PORT}"
     exit 100
 fi
 
