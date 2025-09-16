@@ -946,11 +946,11 @@ main() {
         exit 1
     fi
 
-    # Source the environment file to ensure all variables are available for validation
-    source "$ENV_FILE_PATH"
-
     # Set default optional variables
     set_default_optional_variables "$ENV_FILE_PATH"
+    
+    # Source the environment file to ensure all variables are available for validation
+    source "$ENV_FILE_PATH"
     
     # Validate environment
     validate_environment
