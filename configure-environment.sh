@@ -741,9 +741,8 @@ handle_existing_env_file() {
             fi
             export DATA_MARKET_CONTRACT="$uniswap_v2_dm_contract"
         fi
+        update_common_config "$ENV_FILE_PATH"
     fi
-
-    update_common_config "$ENV_FILE_PATH"
 }
 
 # Function to create new default environment file
