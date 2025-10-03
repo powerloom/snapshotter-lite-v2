@@ -54,8 +54,10 @@ else
     exit 1
 fi
 
-# Source the environment file to get variables
+# Source the environment file, preserving the command-line DEV_MODE setting
+dev_mode_from_flag=$DEV_MODE
 source "$SELECTED_ENV_FILE"
+DEV_MODE=$dev_mode_from_flag
 
 # Ensure FULL_NAMESPACE is available
 if [ -z "$FULL_NAMESPACE" ]; then

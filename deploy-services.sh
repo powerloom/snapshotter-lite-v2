@@ -71,8 +71,10 @@ if [ ! -f "$ENV_FILE" ]; then
     exit 1
 fi
 
-# Source the environment file
+# Source the environment file, preserving the DEV_MODE flag
+dev_mode_from_flag=$DEV_MODE
 source "$ENV_FILE"
+DEV_MODE=$dev_mode_from_flag
 
 # Validate required variables
 required_vars=("FULL_NAMESPACE" "SLOT_ID" "DOCKER_NETWORK_NAME")
@@ -143,11 +145,7 @@ handle_docker_pull() {
     fi
 
     if [ "$DEV_MODE" = "true" ]; then
-        echo "🏗️ Building docker image for snapshotter-lite-v2"
-        ./build-docker.sh
-        echo "🏗️ Building docker image for snapshotter-lite-local-collector"
-        cd ./snapshotter-lite-local-collector/ && chmod +x build-docker.sh && ./build-docker.sh
-        cd ../
+        echo "🔧 DEV mode: building images via docker-compose..."
     else
         # Execute docker compose pull
         echo "🔄 Pulling docker images"

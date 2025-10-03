@@ -1,6 +1,6 @@
 services:
   snapshotter-lite-local-collector:
-    image: snapshotter-lite-local-collector
+    image: ghcr.io/powerloom/snapshotter-lite-local-collector:${LOCAL_COLLECTOR_IMAGE_TAG}
     container_name: snapshotter-lite-local-collector-${FULL_NAMESPACE}
     profiles: ["local-collector"]
     expose:
@@ -22,12 +22,10 @@ services:
       - custom_network
     restart: on-failure:10
   snapshotter-lite-v2:
-    image: snapshotter-lite-v2
+    build: .
     container_name: snapshotter-lite-v2-${SLOT_ID}-${FULL_NAMESPACE}
     volumes:
       - ./logs-${FULL_NAMESPACE_LOWER}:/app/logs
-      - ./computes:/app/computes
-      - ./configs:/app/config
     environment:
       - SIGNER_ACCOUNT_ADDRESS=$SIGNER_ACCOUNT_ADDRESS
       - SIGNER_ACCOUNT_PRIVATE_KEY=$SIGNER_ACCOUNT_PRIVATE_KEY
