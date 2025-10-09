@@ -27,6 +27,7 @@ services:
       - LOCAL_COLLECTOR_P2P_PORT=${LOCAL_COLLECTOR_P2P_PORT:-8001}
       - LOCAL_COLLECTOR_PRIVATE_KEY=${LOCAL_COLLECTOR_PRIVATE_KEY}
       - RENDEZVOUS_POINT=${RENDEZVOUS_POINT:-powerloom-snapshot-sequencer-network}
+      - GOSSIPSUB_SNAPSHOT_SUBMISSION_PREFIX=${GOSSIPSUB_SNAPSHOT_SUBMISSION_PREFIX:-/powerloom/snapshot-submissions}
       - LIBP2P_LOGGING=debug
       - LOG_FILE=/app/logs/collector.log
     networks:
