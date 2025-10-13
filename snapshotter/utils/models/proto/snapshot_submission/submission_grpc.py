@@ -11,6 +11,7 @@ if typing.TYPE_CHECKING:
 
 from snapshotter.utils.models.proto.snapshot_submission import submission_pb2 as submission_pb2
 
+
 class SubmissionBase(abc.ABC):
 
     @abc.abstractmethod

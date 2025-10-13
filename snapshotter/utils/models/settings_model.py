@@ -80,7 +80,7 @@ class Settings(BaseModel):
     ipfs: IPFSConfig
     powerloom_chain_rpc: RPCConfigBase
     node_version: str
-    only_simulate_submissions: bool = True
+    only_simulate_submissions: bool = False
 
 
 # Projects related models
