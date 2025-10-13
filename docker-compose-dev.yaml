@@ -1,6 +1,6 @@
 services:
   snapshotter-lite-local-collector:
-    image: ghcr.io/powerloom/snapshotter-lite-local-collector:${LOCAL_COLLECTOR_IMAGE_TAG}
+    image: snapshotter-lite-local-collector
     container_name: snapshotter-lite-local-collector-${FULL_NAMESPACE}
     profiles: ["local-collector"]
     expose:
