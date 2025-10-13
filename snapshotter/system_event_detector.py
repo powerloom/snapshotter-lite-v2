@@ -102,7 +102,6 @@ class EventDetectorProcess(multiprocessing.Process):
 
         self.processor_distributor = ProcessorDistributor()
 
-        self._logger.info('Initializing SystemEventDetector. Awaiting local collector initialization and bootstrapping for 60 seconds...')
 
         # Load contract ABI from settings
         self.contract_abi = read_json_file(
@@ -152,9 +151,9 @@ class EventDetectorProcess(multiprocessing.Process):
 
         await self.processor_distributor.init()
         # TODO: introduce setting to control simulation snapshot submission if the node has been bootstrapped earlier
-        self._logger.info('Initializing SystemEventDetector. Awaiting local collector initialization and bootstrapping for 60 seconds...')
+        self._logger.info('Initializing SystemEventDetector. Awaiting local collector initialization and DHT bootstrapping for 30 seconds...')
+        await asyncio.sleep(30)
         await self._init_check_and_report()
-        await asyncio.sleep(60)
 
     async def _init_check_and_report(self):
         """
