@@ -327,7 +327,7 @@ class ProcessorDistributor:
         """
         if type_ == 'EpochReleased':
             # sleep for 10 seconds to allow for BDS processing to be completed
-            await asyncio.sleep(10)
+            await asyncio.sleep(20)
 
             return await self._epoch_release_processor(event)
 
