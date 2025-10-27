@@ -2,12 +2,17 @@
 
 # Parse arguments to check for dev mode and other flags
 DEV_MODE=false
+DSV_DEVNET=false
 SETUP_ARGS=""
 
 for arg in "$@"; do
     case $arg in
         --dev-mode)
             DEV_MODE=true
+            ;;
+        --dsv-devnet)
+            DEV_MODE=true
+            DSV_DEVNET=true
             ;;
         *)
             SETUP_ARGS="$SETUP_ARGS $arg"
@@ -25,6 +30,11 @@ SETUP_RESULT_FILE="$SETUP_RESULT_DIR/setup_result"
 
 # Run setup container directly
 echo "🔧 Running setup container to configure environment..."
+if [ "$DSV_DEVNET" = "true" ]; then
+    echo "🚀 DSV Devnet mode enabled"
+    SETUP_ARGS="$SETUP_ARGS --devnet"
+fi
+
 docker run --rm -it \
     -v "$(pwd):/app" \
     -v "$SETUP_RESULT_DIR:/tmp/setup_result_dir" \

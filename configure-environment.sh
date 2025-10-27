@@ -161,6 +161,7 @@ extract_chain_config_jq() {
     local compute_branch=$(echo "$result" | jq -r '.market.compute.branch // empty')
     local compute_commit=$(echo "$result" | jq -r '.market.compute.commit // empty')
     local source_chain=$(echo "$result" | jq -r '.market.sourceChain // empty')
+    local sequencer_addr=$(echo "$result" | jq -r '.market.sequencer // empty')
     
     if [[ "$source_chain" == *"-"* ]]; then source_chain="${source_chain%%-*}"; fi
     
@@ -174,6 +175,7 @@ extract_chain_config_jq() {
     [ -n "$compute_branch" ] && echo "SNAPSHOTTER_COMPUTE_REPO_BRANCH=$compute_branch"
     [ -n "$compute_commit" ] && echo "SNAPSHOTTER_COMPUTE_REPO_COMMIT=$compute_commit"
     [ -n "$source_chain" ] && echo "SOURCE_CHAIN=$source_chain"
+    [ -n "$sequencer_addr" ] && echo "BOOTSTRAP_NODE_ADDR=$sequencer_addr"
 }
 
 # Function to extract chain configuration
@@ -448,6 +450,96 @@ set_default_optional_variables() {
             update_or_append_var "$var_name" "$default_value" "$env_file"
         fi
     done
+
+    # Add DSV-specific configuration for devnet mode
+    if [ "$DEVNET_MODE" = "true" ]; then
+        echo "🔧 Applying DSV devnet specific configuration..."
+
+        # Set DSV-specific gossipsub and rendezvous point for devnet
+        if ! grep -q "^GOSSIPSUB_SNAPSHOT_SUBMISSION_PREFIX=" "$env_file"; then
+            update_or_append_var "GOSSIPSUB_SNAPSHOT_SUBMISSION_PREFIX" "/powerloom/dsv-devnet-alpha/snapshot-submissions" "$env_file"
+            echo "🔔 GOSSIPSUB_SNAPSHOT_SUBMISSION_PREFIX not found in $env_file, setting to DSV devnet default"
+        else
+            # Update existing GOSSIPSUB to DSV version for devnet
+            sed -i.bak 's|^GOSSIPSUB_SNAPSHOT_SUBMISSION_PREFIX=.*|GOSSIPSUB_SNAPSHOT_SUBMISSION_PREFIX=/powerloom/dsv-devnet-alpha/snapshot-submissions|' "$env_file"
+            echo "🔧 Updated GOSSIPSUB_SNAPSHOT_SUBMISSION_PREFIX for DSV devnet mode"
+        fi
+
+        if ! grep -q "^RENDEZVOUS_POINT=" "$env_file"; then
+            update_or_append_var "RENDEZVOUS_POINT" "powerloom-dsv-devnet-alpha" "$env_file"
+            echo "🔔 RENDEZVOUS_POINT not found in $env_file, setting to DSV devnet default"
+        else
+            # Update existing RENDEZVOUS_POINT to DSV version for devnet
+            sed -i.bak 's|^RENDEZVOUS_POINT=.*|RENDEZVOUS_POINT=powerloom-dsv-devnet-alpha|' "$env_file"
+            echo "🔧 Updated RENDEZVOUS_POINT for DSV devnet mode"
+        fi
+
+        # Configure P2P port for DSV devnet
+        if ! grep -q "^LOCAL_COLLECTOR_P2P_PORT=" "$env_file"; then
+            update_or_append_var "LOCAL_COLLECTOR_P2P_PORT" "8001" "$env_file"
+            echo "🔔 LOCAL_COLLECTOR_P2P_PORT not found in $env_file, setting to DSV devnet default (8001)"
+        else
+            echo "✅ LOCAL_COLLECTOR_P2P_PORT already configured in $env_file"
+        fi
+
+        # Handle P2P private key for shared volume approach
+        if ! grep -q "^LOCAL_COLLECTOR_PRIVATE_KEY=" "$env_file"; then
+            echo "🔑 LOCAL_COLLECTOR_PRIVATE_KEY will be generated in container after slot ID validation"
+            echo "   This ensures keys are only generated for verified snapshotter addresses"
+        else
+            echo "✅ LOCAL_COLLECTOR_PRIVATE_KEY already configured in $env_file"
+
+            # Extract the existing key and write it to shared volume for immediate availability
+            EXISTING_P2P_KEY=$(grep "^LOCAL_COLLECTOR_PRIVATE_KEY=" "$env_file" | cut -d'=' -f2-)
+            if [ -n "$EXISTING_P2P_KEY" ]; then
+                echo "📝 Writing pre-configured P2P key to shared volume for immediate availability..."
+
+                # Create shared keys directory
+                SHARED_KEYS_DIR="./shared-volume"
+                mkdir -p "$SHARED_KEYS_DIR"
+
+                # Write private key to shared volume
+                echo "$EXISTING_P2P_KEY" > "$SHARED_KEYS_DIR/p2p_private_key"
+                chmod 600 "$SHARED_KEYS_DIR/p2p_private_key"
+
+                # Create signal file to indicate key is ready
+                echo "Pre-configured P2P key ready" > "$SHARED_KEYS_DIR/p2p_ready"
+                chmod 644 "$SHARED_KEYS_DIR/p2p_ready"
+
+                echo "✅ Pre-configured P2P key written to shared volume: $SHARED_KEYS_DIR/p2p_private_key"
+                echo "🔗 Local collector can start immediately with pre-configured key"
+            else
+                echo "⚠️  Found LOCAL_COLLECTOR_PRIVATE_KEY in env file but value is empty"
+            fi
+        fi
+
+        # Configure optional PUBLIC_IP for DSV devnet (helps with P2P discovery)
+        if ! grep -q "^PUBLIC_IP=" "$env_file"; then
+            echo "🌐 PUBLIC_IP is optional for P2P discovery - leaving unset"
+            echo "   To set manually: Add PUBLIC_IP=<your_public_ip> to $env_file"
+        else
+            echo "✅ PUBLIC_IP already configured in $env_file"
+        fi
+
+        # Validate bootstrap node configuration for DSV devnet
+        if grep -q "^BOOTSTRAP_NODE_ADDR=" "$env_file"; then
+            BOOTSTRAP_ADDR=$(grep "^BOOTSTRAP_NODE_ADDR=" "$env_file" | cut -d'=' -f2)
+            if [ -n "$BOOTSTRAP_ADDR" ]; then
+                echo "✅ BOOTSTRAP_NODE_ADDR configured: $BOOTSTRAP_ADDR"
+            else
+                echo "⚠️  BOOTSTRAP_NODE_ADDR is empty, P2P connectivity may be affected"
+            fi
+        else
+            echo "⚠️  BOOTSTRAP_NODE_ADDR not found in $env_file"
+            echo "   This should have been auto-fetched from curated-datamarkets"
+            echo "   Manual setup may be required: Add BOOTSTRAP_NODE_ADDR=<multiaddr> to $env_file"
+        fi
+
+        # Remove backup files if they exist
+        rm -f "$env_file.bak"
+
+        echo "🎉 DSV devnet P2P configuration completed!"
+    fi
 }
 
 # Main execution flow
