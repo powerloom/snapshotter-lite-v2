@@ -161,10 +161,11 @@ extract_chain_config_jq() {
     local compute_branch=$(echo "$result" | jq -r '.market.compute.branch // empty')
     local compute_commit=$(echo "$result" | jq -r '.market.compute.commit // empty')
     local source_chain=$(echo "$result" | jq -r '.market.sourceChain // empty')
+    local bootstrap_nodes_json=$(echo "$result" | jq -c '.market.bootstrapNodes // []')
     local sequencer_addr=$(echo "$result" | jq -r '.market.sequencer // empty')
-    
+
     if [[ "$source_chain" == *"-"* ]]; then source_chain="${source_chain%%-*}"; fi
-    
+
     [ -n "$rpc_url" ] && echo "CHAIN_RPC_URL=$rpc_url"
     [ -n "$contract_addr" ] && echo "DATA_MARKET_CONTRACT=$contract_addr"
     [ -n "$protocol_state" ] && echo "PROTOCOL_STATE_CONTRACT=$protocol_state"
@@ -175,7 +176,25 @@ extract_chain_config_jq() {
     [ -n "$compute_branch" ] && echo "SNAPSHOTTER_COMPUTE_REPO_BRANCH=$compute_branch"
     [ -n "$compute_commit" ] && echo "SNAPSHOTTER_COMPUTE_REPO_COMMIT=$compute_commit"
     [ -n "$source_chain" ] && echo "SOURCE_CHAIN=$source_chain"
-    [ -n "$sequencer_addr" ] && echo "BOOTSTRAP_NODE_ADDR=$sequencer_addr"
+
+    # Handle multiple bootstrap nodes from sources.json
+    local bootstrap_count=$(echo "$bootstrap_nodes_json" | jq 'length')
+    if [ "$bootstrap_count" -gt 0 ]; then
+        # Create comma-separated list of bootstrap nodes
+        local bootstrap_addrs=$(echo "$bootstrap_nodes_json" | jq -r '.[]' | tr '\n' ',' | sed 's/,$//')
+        echo "BOOTSTRAP_NODE_ADDRS=$bootstrap_addrs"
+
+        # Also set first node for any remaining references that expect single address
+        local first_bootstrap=$(echo "$bootstrap_nodes_json" | jq -r '.[0]')
+        echo "BOOTSTRAP_NODE_ADDR=$first_bootstrap"
+
+        echo "🔗 Configured $bootstrap_count bootstrap nodes from sources.json"
+    elif [ -n "$sequencer_addr" ]; then
+        # Fallback to legacy sequencer field if no bootstrapNodes array
+        echo "BOOTSTRAP_NODE_ADDRS=$sequencer_addr"
+        echo "BOOTSTRAP_NODE_ADDR=$sequencer_addr"
+        echo "⚠️  Using legacy sequencer configuration (consider updating sources.json)"
+    fi
 }
 
 # Function to extract chain configuration
@@ -522,17 +541,18 @@ set_default_optional_variables() {
         fi
 
         # Validate bootstrap node configuration for DSV devnet
-        if grep -q "^BOOTSTRAP_NODE_ADDR=" "$env_file"; then
+        if grep -q "^BOOTSTRAP_NODE_ADDRS=" "$env_file"; then
+            BOOTSTRAP_ADDRS=$(grep "^BOOTSTRAP_NODE_ADDRS=" "$env_file" | cut -d'=' -f2)
+            BOOTSTRAP_COUNT=$(echo "$BOOTSTRAP_ADDRS" | tr ',' '\n' | wc -l | tr -d ' ')
+            echo "✅ BOOTSTRAP_NODE_ADDRS configured with $BOOTSTRAP_COUNT nodes: $BOOTSTRAP_ADDRS"
+        elif grep -q "^BOOTSTRAP_NODE_ADDR=" "$env_file"; then
             BOOTSTRAP_ADDR=$(grep "^BOOTSTRAP_NODE_ADDR=" "$env_file" | cut -d'=' -f2)
-            if [ -n "$BOOTSTRAP_ADDR" ]; then
-                echo "✅ BOOTSTRAP_NODE_ADDR configured: $BOOTSTRAP_ADDR"
-            else
-                echo "⚠️  BOOTSTRAP_NODE_ADDR is empty, P2P connectivity may be affected"
-            fi
+            echo "✅ BOOTSTRAP_NODE_ADDR configured (single node): $BOOTSTRAP_ADDR"
+            echo "💡 Consider upgrading to sources.json with bootstrapNodes array for multiple nodes"
         else
-            echo "⚠️  BOOTSTRAP_NODE_ADDR not found in $env_file"
-            echo "   This should have been auto-fetched from curated-datamarkets"
-            echo "   Manual setup may be required: Add BOOTSTRAP_NODE_ADDR=<multiaddr> to $env_file"
+            echo "⚠️  No bootstrap node configuration found in $env_file"
+            echo "   This should have been auto-fetched from curated-datamarkets sources.json"
+            echo "   Check that the selected data market has bootstrapNodes configured"
         fi
 
         # Remove backup files if they exist
