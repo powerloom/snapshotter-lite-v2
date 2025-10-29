@@ -608,24 +608,25 @@ main() {
         # Generate P2P private key if not present
         echo ""
         echo "🔑 Checking P2P private key setup..."
-        SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-        if [ -f "$SCRIPT_DIR/scripts/setup_operator_keys.sh" ]; then
-            # Check if key already exists (the script will handle this automatically)
-            if ! grep -q "^[[:space:]]*LOCAL_COLLECTOR_PRIVATE_KEY=" "$ENV_FILE_PATH"; then
-                echo "📝 No P2P private key found, generating one..."
-                if "$SCRIPT_DIR/scripts/setup_operator_keys.sh" --env-file "$ENV_FILE_PATH"; then
-                    echo "✅ P2P private key generated and added to environment file"
-                else
-                    echo "⚠️  P2P key generation failed, but environment setup completed"
-                    echo "   You can run manually later: ./scripts/setup_operator_keys.sh --env-file $ENV_FILE_PATH"
-                fi
+        if ! grep -q "^[[:space:]]*LOCAL_COLLECTOR_PRIVATE_KEY=" "$ENV_FILE_PATH"; then
+            echo "📝 No P2P private key found, generating one using key generator container..."
+
+            # Build and run key generator
+            docker run --rm -v "$(pwd)/keygen:/app" -w /app golang:1.24-alpine sh -c "go mod download && go run generate_key.go" > /tmp/keygen_output 2>&1
+
+            # Extract the 128-character hex key
+            PRIVATE_KEY=$(grep -o "[a-f0-9]\{128\}" /tmp/keygen_output | head -1)
+            if [ -n "$PRIVATE_KEY" ] && [ ${#PRIVATE_KEY} -eq 128 ]; then
+                echo "LOCAL_COLLECTOR_PRIVATE_KEY=$PRIVATE_KEY" >> "$ENV_FILE_PATH"
+                echo "✅ P2P private key generated and added to environment file"
             else
-                echo "✅ P2P private key already exists in environment file"
+                echo "❌ Failed to extract valid P2P key from generator output"
+                echo "   Output saved to /tmp/keygen_output for debugging"
             fi
+            rm -f /tmp/keygen_output
         else
-            echo "⚠️  P2P key setup script not found, skipping automatic key generation"
-            echo "   You may need to generate a P2P key manually"
+            echo "✅ P2P private key already exists in environment file"
         fi
 
         if [ -n "$RESULT_FILE" ]; then echo "$ENV_FILE_PATH" > "$RESULT_FILE"; fi
