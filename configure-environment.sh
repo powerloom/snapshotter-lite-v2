@@ -605,7 +605,6 @@ main() {
                 update_or_append_var "OVERRIDE_DEFAULTS" "true" "$ENV_FILE_PATH"
                 update_or_append_var "DEV_MODE" "true" "$ENV_FILE_PATH"
                 update_or_append_var "LOCAL_COLLECTOR_P2P_PORT" "8001" "$ENV_FILE_PATH"
-                update_or_append_var "BDS_DSV_DEVNET" "true" "$ENV_FILE_PATH"
             else
                 update_or_append_var "OVERRIDE_DEFAULTS" "false" "$ENV_FILE_PATH"
             fi

@@ -158,10 +158,11 @@ COMPOSE_PROFILES="${COLLECTOR_PROFILE_STRING}"
 
 # Modify the deploy-services call to use the profiles (setup already ran)
 if [ "$DEV_MODE" == "true" ]; then
-    ./deploy-services.sh --env-file "$SELECTED_ENV_FILE" \
-        --project-name "$PROJECT_NAME_LOWER" \
-        --collector-profile "$COMPOSE_PROFILES" \
-        --dev-mode
+    DEPLOY_ARGS="--env-file \"$SELECTED_ENV_FILE\" --project-name \"$PROJECT_NAME_LOWER\" --collector-profile \"$COMPOSE_PROFILES\" --dev-mode"
+    if [ "$DSV_DEVNET" == "true" ]; then
+        DEPLOY_ARGS="$DEPLOY_ARGS --bds-dsv-devnet"
+    fi
+    eval "./deploy-services.sh $DEPLOY_ARGS"
 else
     ./deploy-services.sh --env-file "$SELECTED_ENV_FILE" \
         --project-name "$PROJECT_NAME_LOWER" \

@@ -10,12 +10,14 @@ show_help() {
     echo "  -c, --collector-profile STR  Set collector profile string"
     echo "  -t, --image-tag TAG         Set docker image tag"
     echo "  -d, --dev-mode              Enable dev mode"
+    echo "  --bds-dsv-devnet            Enable BDS DSV devnet mode"
     echo "  -h, --help                  Show this help message"
     echo
     echo "Examples:"
     echo "  ./deploy-services.sh --env-file .env-pre-mainnet-AAVEV3-ETH"
     echo "  ./deploy-services.sh --project-name snapshotter-lite-v2-123-aavev3"
     echo "  ./deploy-services.sh --dev-mode"
+    echo "  ./deploy-services.sh --bds-dsv-devnet"
 }
 
 # Initialize variables
@@ -24,6 +26,7 @@ PROJECT_NAME=""
 COLLECTOR_PROFILE=""
 IMAGE_TAG="latest"
 DEV_MODE="false"
+BDS_DSV_DEVNET="false"
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -46,6 +49,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         -d|--dev-mode)
             DEV_MODE="true"
+            shift
+            ;;
+        --bds-dsv-devnet)
+            BDS_DSV_DEVNET="true"
             shift
             ;;
         -h|--help)
