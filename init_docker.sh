@@ -69,10 +69,10 @@ generate_p2p_key() {
     # 3. Validate keys if they exist
     validate_key() {
         local key="$1"
-        if [ -n "$key" ] && [ ${#key} -eq 128 ] && [[ "$key" =~ ^[0-9a-fA-F]+$ ]]; then
+        if [ -n "$key" ] && [ ${#key} -eq 64 ] && [[ "$key" =~ ^[0-9a-fA-F]+$ ]]; then
             return 0
         else
-            echo "⚠️  Invalid P2P key format (expected 128 hex chars)"
+            echo "⚠️  Invalid P2P key format (expected 64 hex chars)"
             return 1
         fi
     }
@@ -153,6 +153,7 @@ generate_p2p_key() {
         sync_needed=true
     fi
 
+    
     # 6. Create/update signal file
     echo "P2P key synchronized: $(date)" > "$SHARED_KEYS_DIR/p2p_ready"
     chmod 644 "$SHARED_KEYS_DIR/p2p_ready"
