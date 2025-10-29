@@ -25,6 +25,16 @@ fi
 # Store configured port for fallback search
 CONFIGURED_PORT=$LOCAL_COLLECTOR_PORT
 
+# Set PORT_CHECK_CMD for port search loop (same logic as above)
+if command -v nc &> /dev/null; then
+    PORT_CHECK_CMD="nc -z"
+elif command -v netcat &> /dev/null; then
+    PORT_CHECK_CMD="netcat -z"
+else
+    # Pure bash TCP connection test - available on all systems
+    PORT_CHECK_CMD="timeout 1 bash -c '</dev/tcp/\$1/\$2'"
+fi
+
 echo "🔄 Starting collector connectivity checks..."
 
 # Array of hosts to try
