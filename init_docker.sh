@@ -41,7 +41,7 @@ generate_p2p_key() {
     # Only generate key if LOCAL_COLLECTOR_PRIVATE_KEY is not set
     if [ -z "$LOCAL_COLLECTOR_PRIVATE_KEY" ]; then
         # Check if P2P key already exists in shared volume
-        SHARED_KEY_FILE="./shared-volume/p2p_private_key"
+        SHARED_KEY_FILE="/keys/p2p_private_key"
         if [ -f "$SHARED_KEY_FILE" ]; then
             # Read and validate existing key
             VOLUME_KEY=$(cat "$SHARED_KEY_FILE" 2>/dev/null || echo "")
@@ -76,7 +76,7 @@ generate_p2p_key() {
         echo "✅ Generated new P2P private key"
 
         # Create shared volume directory
-        SHARED_KEYS_DIR="./shared-volume"
+        SHARED_KEYS_DIR="/keys"
         mkdir -p "$SHARED_KEYS_DIR"
 
         # Write private key to shared volume

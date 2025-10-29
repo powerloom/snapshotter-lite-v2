@@ -37,6 +37,7 @@ services:
     container_name: snapshotter-lite-v2-${SLOT_ID}-${FULL_NAMESPACE}
     volumes:
       - ./logs-${FULL_NAMESPACE_LOWER}:/app/logs
+      - ./shared-volume:/keys
     environment:
       - SIGNER_ACCOUNT_ADDRESS=$SIGNER_ACCOUNT_ADDRESS
       - SIGNER_ACCOUNT_PRIVATE_KEY=$SIGNER_ACCOUNT_PRIVATE_KEY
