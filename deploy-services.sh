@@ -146,6 +146,33 @@ handle_docker_pull() {
 
     if [ "$DEV_MODE" = "true" ]; then
         echo "🔧 DEV mode: building images via docker-compose..."
+
+        # Clone local collector repository for BDS DSV devnet mode
+        if [ "$BDS_DSV_DEVNET" = "true" ]; then
+            echo "🔗 BDS DSV Devnet mode detected - cloning local collector repository..."
+            LOCAL_COLLECTOR_REPO_URL="https://github.com/powerloom/snapshotter-lite-local-collector.git"
+            LOCAL_COLLECTOR_DIR="./snapshotter-lite-local-collector"
+
+            if [ ! -d "$LOCAL_COLLECTOR_DIR" ]; then
+                echo "📥 Cloning local collector repository from $LOCAL_COLLECTOR_REPO_URL"
+                git clone "$LOCAL_COLLECTOR_REPO_URL" "$LOCAL_COLLECTOR_DIR"
+                cd "$LOCAL_COLLECTOR_DIR"
+                echo "🌿 Checking out feat/gossipsub-submissions branch"
+                git checkout feat/gossipsub-submissions
+                cd ../
+                echo "✅ Local collector repository cloned and checked out to feat/gossipsub-submissions branch"
+            else
+                echo "📁 Local collector directory already exists, skipping clone"
+                cd "$LOCAL_COLLECTOR_DIR"
+                CURRENT_BRANCH=$(git branch --show-current)
+                if [ "$CURRENT_BRANCH" != "feat/gossipsub-submissions" ]; then
+                    echo "🌿 Switching to feat/gossipsub-submissions branch"
+                    git checkout feat/gossipsub-submissions
+                fi
+                cd ../
+            fi
+        fi
+
         echo "🏗️ Building docker image for snapshotter-lite-local-collector"
         cd ./snapshotter-lite-local-collector/ && chmod +x build-docker.sh && ./build-docker.sh
         cd ../

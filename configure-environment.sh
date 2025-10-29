@@ -523,12 +523,15 @@ set_default_optional_variables() {
             echo "✅ LOCAL_COLLECTOR_PRIVATE_KEY already configured in $env_file"
         fi
 
-        # Configure optional PUBLIC_IP for DSV devnet (helps with P2P discovery)
-        if ! grep -q "^PUBLIC_IP=" "$env_file"; then
+        # For BDS DSV devnet, remove empty PUBLIC_IP line to avoid dumping empty line
+        if grep -q "^PUBLIC_IP=$" "$env_file"; then
+            sed -i '' '/^PUBLIC_IP=$/d' "$env_file"
+            echo "✅ Removed empty PUBLIC_IP line for BDS DSV devnet setup"
+        elif grep -q "^PUBLIC_IP=" "$env_file"; then
+            echo "✅ PUBLIC_IP already configured in $env_file"
+        else
             echo "🌐 PUBLIC_IP is optional for P2P discovery - leaving unset"
             echo "   To set manually: Add PUBLIC_IP=<your_public_ip> to $env_file"
-        else
-            echo "✅ PUBLIC_IP already configured in $env_file"
         fi
 
         # Validate bootstrap node configuration for DSV devnet
@@ -601,6 +604,7 @@ main() {
                 update_or_append_var "OVERRIDE_DEFAULTS" "true" "$ENV_FILE_PATH"
                 update_or_append_var "DEV_MODE" "true" "$ENV_FILE_PATH"
                 update_or_append_var "LOCAL_COLLECTOR_P2P_PORT" "8001" "$ENV_FILE_PATH"
+                update_or_append_var "BDS_DSV_DEVNET" "true" "$ENV_FILE_PATH"
             else
                 update_or_append_var "OVERRIDE_DEFAULTS" "false" "$ENV_FILE_PATH"
             fi
