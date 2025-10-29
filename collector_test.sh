@@ -72,11 +72,24 @@ if ! docker ps | grep -q "$container_name"; then
 else
     echo "✅ Collector container running: $container_name"
     test_namespace=true
+
+    # Get the actual port the container is bound to
+    actual_port=$(docker port "${container_name}" 2>/dev/null | grep -oP ':(\d+)' | head -1 | cut -d: -f2)
+    if [ -n "$actual_port" ]; then
+        echo "🔍 Collector container bound to actual port: $actual_port"
+
+        # Update environment file with actual port (same logic as line 97)
+        sed -i".backup" "s/^LOCAL_COLLECTOR_PORT=.*/LOCAL_COLLECTOR_PORT=${actual_port}/" "${ENV_FILE}"
+        LOCAL_COLLECTOR_PORT=$actual_port
+        echo "✅ Updated LOCAL_COLLECTOR_PORT in environment file: $actual_port"
+    else
+        echo "⚠️ Could not determine actual port for collector container"
+    fi
 fi
 
 # Final status check
 if [ "$test_ping" = true ] && [ "$test_namespace" = true ]; then
-    echo "✅ Collector is running and reachable"
+    echo "✅ Collector is running and reachable" 
     exit 100
 else
     echo "⚠️  No active collector found - searching for available ports..."
