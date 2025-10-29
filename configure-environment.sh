@@ -616,7 +616,7 @@ main() {
             docker run --rm -v "$(pwd)/keygen:/app" -w /app golang:1.24-alpine sh -c "go mod download && go run generate_key.go" > /tmp/keygen_output 2>&1
 
             # Extract the 128-character hex key
-            PRIVATE_KEY=$(grep -o "[a-f0-9]\{128\}" /tmp/keygen_output | head -1)
+            PRIVATE_KEY=$(grep "Generated Private Key (hex):" /tmp/keygen_output | awk '{print $5}' | head -1)
             if [ -n "$PRIVATE_KEY" ] && [ ${#PRIVATE_KEY} -eq 128 ]; then
                 echo "LOCAL_COLLECTOR_PRIVATE_KEY=$PRIVATE_KEY" >> "$ENV_FILE_PATH"
                 echo "✅ P2P private key generated and added to environment file"
