@@ -22,6 +22,9 @@ if [ -z "$LOCAL_COLLECTOR_PORT" ]; then
     export LOCAL_COLLECTOR_PORT=50051
 fi
 
+# Store configured port for fallback search
+CONFIGURED_PORT=$LOCAL_COLLECTOR_PORT
+
 echo "🔄 Starting collector connectivity checks..."
 
 # Array of hosts to try
@@ -67,7 +70,7 @@ if [ "$test_ping" = true ] && [ "$test_namespace" = true ]; then
     exit 100
 else
     echo "⚠️  No active collector found - searching for available ports..."
-    for port in {50051..51050}; do
+    for port in $(seq $CONFIGURED_PORT 51050); do
         port_is_free=false
         if [[ "$PORT_CHECK_CMD" == *"curl"* ]]; then
             if ! $PORT_CHECK_CMD "localhost:$port" 2>/dev/null; then
