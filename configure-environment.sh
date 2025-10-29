@@ -525,7 +525,8 @@ set_default_optional_variables() {
 
         # For BDS DSV devnet, remove empty PUBLIC_IP line to avoid dumping empty line
         if grep -q "^PUBLIC_IP=$" "$env_file"; then
-            sed -i '' '/^PUBLIC_IP=$/d' "$env_file"
+            # Use temporary file for compatibility across systems
+            grep -v "^PUBLIC_IP=$" "$env_file" > "${env_file}.tmp" && mv "${env_file}.tmp" "$env_file"
             echo "✅ Removed empty PUBLIC_IP line for BDS DSV devnet setup"
         elif grep -q "^PUBLIC_IP=" "$env_file"; then
             echo "✅ PUBLIC_IP already configured in $env_file"

@@ -148,6 +148,7 @@ handle_docker_pull() {
         echo "🔧 DEV mode: building images via docker-compose..."
 
         # Clone local collector repository for BDS DSV devnet mode
+        echo "🔍 Debug: BDS_DSV_DEVNET=$BDS_DSV_DEVNET"
         if [ "$BDS_DSV_DEVNET" = "true" ]; then
             echo "🔗 BDS DSV Devnet mode detected - cloning local collector repository..."
             LOCAL_COLLECTOR_REPO_URL="https://github.com/powerloom/snapshotter-lite-local-collector.git"
@@ -171,6 +172,8 @@ handle_docker_pull() {
                 fi
                 cd ../
             fi
+        else
+            echo "ℹ️ BDS DSV Devnet mode not detected, skipping local collector clone"
         fi
 
         echo "🏗️ Building docker image for snapshotter-lite-local-collector"
