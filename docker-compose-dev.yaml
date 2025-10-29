@@ -10,7 +10,6 @@ services:
       - ${LOCAL_COLLECTOR_P2P_PORT}:${LOCAL_COLLECTOR_P2P_PORT}
     volumes:
       - ./shared-volume:/keys
-      - ./scripts/wait_for_p2p_key_and_start.sh:/app/wait_for_p2p_key_and_start.sh:ro
       - ./logs-collector-${FULL_NAMESPACE_LOWER}:/app/logs
       - ./logs-collector-${FULL_NAMESPACE_LOWER}/archive:/app/logs/archive
     environment:
@@ -33,10 +32,6 @@ services:
     networks:
       - custom_network
     restart: on-failure:10
-    command: >
-      bash -c "
-        /app/wait_for_p2p_key_and_start.sh
-      "
   snapshotter-lite-v2:
     build: .
     container_name: snapshotter-lite-v2-${SLOT_ID}-${FULL_NAMESPACE}
