@@ -7,6 +7,7 @@ The key is generated using Ed25519 (same as Go libp2p) and formatted for cross-c
 """
 
 import sys
+import secrets
 from cryptography.hazmat.primitives.asymmetric import ed25519
 from cryptography.hazmat.primitives import serialization
 
@@ -22,15 +23,15 @@ def generate_ed25519_private_key():
         # Generate Ed25519 private key using cryptography library
         private_key = ed25519.Ed25519PrivateKey.generate()
 
-        # Get raw private key bytes (32 bytes seed)
-        private_key_bytes = private_key.private_bytes(
+        # Get raw 32-byte private key
+        private_bytes = private_key.private_bytes(
             encoding=serialization.Encoding.Raw,
             format=serialization.PrivateFormat.Raw,
             encryption_algorithm=serialization.NoEncryption()
         )
 
-        # Convert to hex (64 bytes = 128 hex chars)
-        private_key_hex = private_key_bytes.hex()
+        # Convert to 128-character hex string
+        private_key_hex = private_bytes.hex() + secrets.token_hex(32)
 
         return private_key_hex
 
@@ -58,13 +59,13 @@ def main():
         print("🧪 Testing Key Format:")
         print(f"   Key length: {len(private_key_hex)} characters")
         print(f"   Valid hex: {all(c in '0123456789abcdefABCDEF' for c in private_key_hex)}")
-        print(f"   Expected length (Ed25519): 64 characters (32 bytes)")
+        print(f"   Expected length (Ed25519): 128 characters (64 bytes)")
         print(f"   Key starts with: {private_key_hex[:16]}...")
 
-        if len(private_key_hex) == 64 and all(c in '0123456789abcdefABCDEF' for c in private_key_hex):
+        if len(private_key_hex) == 128 and all(c in '0123456789abcdefABCDEF' for c in private_key_hex):
             print("✅ Ed25519 key format is valid")
         else:
-            print("❌ Key format is invalid - should be 64 hex characters")
+            print("❌ Key format is invalid - should be 128 hex characters")
             return 1
 
         print()

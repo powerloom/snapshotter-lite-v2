@@ -69,10 +69,10 @@ generate_p2p_key() {
     # 3. Validate keys if they exist
     validate_key() {
         local key="$1"
-        if [ -n "$key" ] && [ ${#key} -eq 64 ] && [[ "$key" =~ ^[0-9a-fA-F]+$ ]]; then
+        if [ -n "$key" ] && [ ${#key} -eq 128 ] && [[ "$key" =~ ^[0-9a-fA-F]+$ ]]; then
             return 0
         else
-            echo "⚠️  Invalid P2P key format (expected 64 hex chars)"
+            echo "⚠️  Invalid P2P key format (expected 128 hex chars)"
             return 1
         fi
     }
