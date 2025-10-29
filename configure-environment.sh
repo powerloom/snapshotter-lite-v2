@@ -12,7 +12,7 @@ DOCKER_MODE=false
 RESULT_FILE=""
 
 # GitHub configuration URL
-MARKETS_CONFIG_URL="https://raw.githubusercontent.com/powerloom/curated-datamarkets/refs/heads/feat/uniswapv3/sources.json"
+MARKETS_CONFIG_URL="https://raw.githubusercontent.com/powerloom/curated-datamarkets/main/sources.json"
 
 # Dynamic defaults (will be populated from GitHub API)
 DEFAULT_POWERLOOM_CHAIN=""
@@ -593,7 +593,15 @@ main() {
             update_common_config "$ENV_FILE_PATH"
             prompt_for_credentials "$ENV_FILE_PATH"
             FILE_WAS_NEWLY_CREATED=true
-            update_or_append_var "OVERRIDE_DEFAULTS" "false" "$ENV_FILE_PATH"
+
+            # Set OVERRIDE_DEFAULTS=true for BDS DSV Devnet mode
+            if [ "$BDS_DSV_DEVNET" = "true" ]; then
+                update_or_append_var "OVERRIDE_DEFAULTS" "true" "$ENV_FILE_PATH"
+                update_or_append_var "DEV_MODE" "true" "$ENV_FILE_PATH"
+                update_or_append_var "LOCAL_COLLECTOR_P2P_PORT" "8001" "$ENV_FILE_PATH"
+            else
+                update_or_append_var "OVERRIDE_DEFAULTS" "false" "$ENV_FILE_PATH"
+            fi
             echo "🟢 $ENV_FILE_PATH file created successfully."
         fi
     fi

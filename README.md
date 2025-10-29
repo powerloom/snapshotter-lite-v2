@@ -257,11 +257,16 @@ Choose `y` or `n` depending on whether you wish to change them.
 
 #### Quick Devnet Setup
 
-The `build.sh` script provides a `--devnet` flag for quick devnet deployment without manual configuration prompts.
+The `build.sh` script provides flags for quick devnet deployment without manual configuration prompts.
 
-To use this feature, run:
+**Standard Devnet Setup:**
 ```bash
 ./build.sh --devnet
+```
+
+**BDS DSV Devnet Setup (Recommended for testing BDS deployments):**
+```bash
+./build.sh --bds-dsv-devnet
 ```
 
 When the `--devnet` flag is used:
@@ -274,10 +279,23 @@ When the `--devnet` flag is used:
 4. Skips chain selection prompts for faster setup
 5. Sets `OVERRIDE_DEFAULTS=true` to preserve devnet configuration
 
+When the `--bds-dsv-devnet` flag is used (BDS DSV deployments):
+1. Automatically configures for BDS DSV devnet
+2. Auto-selects `BDS_DEVNET_ALPHA_UNISWAPV3` datamarket
+3. Sets optimal configuration for BDS:
+   - `DEV_MODE=true`
+   - `OVERRIDE_DEFAULTS=true`
+   - `LOCAL_COLLECTOR_P2P_PORT=8001`
+4. Uses appropriate branches:
+   - Lite node: `feat/bds_lite_dsv_rollout`
+   - Local collector: `feat/gossipsub-submissions`
+5. Eliminates all manual configuration for BDS deployments
+
 You can combine this with other flags:
 ```bash
 ./build.sh --devnet --skip-credential-update
 ./build.sh --devnet --data-market-contract-number 1  # For Aave V3 on devnet
+./build.sh --bds-dsv-devnet --skip-credential-update
 ```
 
 This is ideal for developers who frequently switch between mainnet and devnet environments.
