@@ -9,8 +9,8 @@ services:
       - ${LOCAL_COLLECTOR_PORT}:${LOCAL_COLLECTOR_PORT}
       - ${LOCAL_COLLECTOR_P2P_PORT:-8001}:${LOCAL_COLLECTOR_P2P_PORT:-8001}
     volumes:
-      - ./shared-volume:/keys
-      - ./scripts/wait_for_p2p_key_and_start.sh:/app/wait_for_p2p_key_and_start.sh:ro
+      - ./logs-collector-${FULL_NAMESPACE_LOWER}:/app/logs
+      - ./logs-collector-${FULL_NAMESPACE_LOWER}/archive:/app/logs/archive
     environment:
       - DATA_MARKET_CONTRACT=$DATA_MARKET_CONTRACT
       - LOCAL_COLLECTOR_PORT=$LOCAL_COLLECTOR_PORT
@@ -27,10 +27,6 @@ services:
       - PUBLIC_IP=${PUBLIC_IP}
       - RENDEZVOUS_POINT=${RENDEZVOUS_POINT:-powerloom-snapshot-sequencer-network}
       - GOSSIPSUB_SNAPSHOT_SUBMISSION_PREFIX=${GOSSIPSUB_SNAPSHOT_SUBMISSION_PREFIX:-/powerloom/snapshot-submissions}
-    command: >
-      bash -c "
-        /app/wait_for_p2p_key_and_start.sh
-      "
     networks:
       - custom_network
     deploy:

@@ -9,12 +9,12 @@ services:
       - ${LOCAL_COLLECTOR_PORT}:${LOCAL_COLLECTOR_PORT}
       - ${LOCAL_COLLECTOR_P2P_PORT}:${LOCAL_COLLECTOR_P2P_PORT}
     volumes:
-      - ./shared-volume:/keys
       - ./logs-collector-${FULL_NAMESPACE_LOWER}:/app/logs
       - ./logs-collector-${FULL_NAMESPACE_LOWER}/archive:/app/logs/archive
     environment:
       - DATA_MARKET_CONTRACT=$DATA_MARKET_CONTRACT
       - LOCAL_COLLECTOR_PORT=$LOCAL_COLLECTOR_PORT
+      - LOCAL_COLLECTOR_PRIVATE_KEY=$LOCAL_COLLECTOR_PRIVATE_KEY
       - MAX_STREAM_POOL_SIZE=$MAX_STREAM_POOL_SIZE
       - STREAM_HEALTH_CHECK_TIMEOUT_MS=$STREAM_HEALTH_CHECK_TIMEOUT_MS
       - STREAM_WRITE_TIMEOUT_MS=$STREAM_WRITE_TIMEOUT_MS
@@ -37,7 +37,6 @@ services:
     container_name: snapshotter-lite-v2-${SLOT_ID}-${FULL_NAMESPACE}
     volumes:
       - ./logs-${FULL_NAMESPACE_LOWER}:/app/logs
-      - ./shared-volume:/keys
     environment:
       - SIGNER_ACCOUNT_ADDRESS=$SIGNER_ACCOUNT_ADDRESS
       - SIGNER_ACCOUNT_PRIVATE_KEY=$SIGNER_ACCOUNT_PRIVATE_KEY
