@@ -605,26 +605,10 @@ main() {
     if [ "$SETUP_COMPLETE" = true ]; then
         echo "✅ Configuration complete. Environment file ready at $ENV_FILE_PATH"
 
-        # Generate P2P private key if not present
-        echo ""
-        echo "🔑 Checking P2P private key setup..."
-
+        # Note: P2P private key will be generated after setup container completes
         if ! grep -q "^[[:space:]]*LOCAL_COLLECTOR_PRIVATE_KEY=" "$ENV_FILE_PATH"; then
-            echo "📝 No P2P private key found, generating one using key generator container..."
-
-            # Build and run key generator
-            docker run --rm -v "$(pwd)/keygen:/app" -w /app golang:1.24-alpine sh -c "go mod download && go run generate_key.go" > /tmp/keygen_output 2>&1
-
-            # Extract the 128-character hex key
-            PRIVATE_KEY=$(grep "Generated Private Key (hex):" /tmp/keygen_output | awk '{print $5}' | head -1)
-            if [ -n "$PRIVATE_KEY" ] && [ ${#PRIVATE_KEY} -eq 128 ]; then
-                echo "LOCAL_COLLECTOR_PRIVATE_KEY=$PRIVATE_KEY" >> "$ENV_FILE_PATH"
-                echo "✅ P2P private key generated and added to environment file"
-            else
-                echo "❌ Failed to extract valid P2P key from generator output"
-                echo "   Output saved to /tmp/keygen_output for debugging"
-            fi
-            rm -f /tmp/keygen_output
+            echo "ℹ️  LOCAL_COLLECTOR_PRIVATE_KEY not set - will be generated after setup completes"
+            echo "   Key generation will run on host system with Docker access"
         else
             echo "✅ P2P private key already exists in environment file"
         fi

@@ -79,6 +79,29 @@ fi
 export FULL_NAMESPACE
 export NO_COLLECTOR
 
+# Generate P2P private key if not present (runs on host system with Docker access)
+if ! grep -q "^[[:space:]]*LOCAL_COLLECTOR_PRIVATE_KEY=" "$SELECTED_ENV_FILE"; then
+    echo ""
+    echo "🔑 Generating P2P private key on host system..."
+
+    # Run key generator in Docker and capture output
+    docker run --rm -v "$(pwd)/keygen:/app" -w /app golang:1.24-alpine sh -c "go mod download && go run generate_key.go" > /tmp/keygen_output 2>&1
+
+    # Extract the key from output
+    PRIVATE_KEY=$(grep "Generated Private Key (hex):" /tmp/keygen_output | awk '{print $5}' | head -1)
+    if [ -n "$PRIVATE_KEY" ] && [ ${#PRIVATE_KEY} -eq 128 ]; then
+        echo "LOCAL_COLLECTOR_PRIVATE_KEY=$PRIVATE_KEY" >> "$SELECTED_ENV_FILE"
+        echo "✅ P2P private key generated and added to environment file"
+    else
+        echo "❌ Failed to extract valid P2P key from generator output"
+        echo "   Output: $(cat /tmp/keygen_output 2>/dev/null || echo 'No output file')"
+        exit 1
+    fi
+    rm -f /tmp/keygen_output
+else
+    echo "✅ P2P private key already exists in environment file"
+fi
+
 if [ "$DEV_MODE" != "true" ]; then
     # Set image tag based on git branch
     GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
