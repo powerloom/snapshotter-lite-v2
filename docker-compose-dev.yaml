@@ -3,11 +3,9 @@ services:
     image: snapshotter-lite-local-collector
     container_name: snapshotter-lite-local-collector-${FULL_NAMESPACE}
     profiles: ["local-collector"]
-    expose:
-      - ${LOCAL_COLLECTOR_PORT}
     ports:
-      - ${LOCAL_COLLECTOR_PORT}:${LOCAL_COLLECTOR_PORT}
-      - ${LOCAL_COLLECTOR_P2P_PORT}:${LOCAL_COLLECTOR_P2P_PORT}
+      - "127.0.0.1:${LOCAL_COLLECTOR_PORT:-50051}:${LOCAL_COLLECTOR_PORT:-50051}"
+      - "127.0.0.1:${LOCAL_COLLECTOR_P2P_PORT:-8001}:${LOCAL_COLLECTOR_P2P_PORT:-8001}"
     volumes:
       - ./logs-collector-${FULL_NAMESPACE_LOWER}:/app/logs
       - ./logs-collector-${FULL_NAMESPACE_LOWER}/archive:/app/logs/archive

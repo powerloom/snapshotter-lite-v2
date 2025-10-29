@@ -7,6 +7,7 @@ SKIP_CREDENTIAL_UPDATE=false
 NO_COLLECTOR=false
 OVERRIDE_DEFAULTS_SCRIPT_FLAG=false
 DEVNET_MODE=false
+BDS_DSV_DEVNET=false
 DOCKER_MODE=false
 RESULT_FILE=""
 
@@ -86,6 +87,7 @@ parse_arguments() {
             --no-collector) NO_COLLECTOR=true; shift ;;
             --override) OVERRIDE_DEFAULTS_SCRIPT_FLAG=true; shift ;;
             --devnet) DEVNET_MODE=true; shift ;;
+            --bds-dsv-devnet) DEVNET_MODE=true; BDS_DSV_DEVNET=true; shift ;;
             --docker-mode) DOCKER_MODE=true; shift ;;
             --result-file) RESULT_FILE=$2; shift 2 ;;
             *)
@@ -321,7 +323,14 @@ select_market_and_configure() {
     local selected_chain_name
     local selected_market_name
 
-    if [ "$is_devnet_mode" = "true" ]; then
+    # Auto-select BDS_DEVNET_ALPHA_UNISWAPV3 when BDS_DSV_DEVNET is enabled
+    if [ "$BDS_DSV_DEVNET" = "true" ]; then
+        echo "🚀 BDS DSV Devnet mode - auto-selecting BDS_DEVNET_ALPHA_UNISWAPV3 market"
+        selected_chain_name="DEVNET"
+        selected_market_name="BDS_DEVNET_ALPHA_UNISWAPV3"
+        echo "✅ Selected chain: $selected_chain_name"
+        echo "✅ Selected market: $selected_market_name"
+    elif [ "$is_devnet_mode" = "true" ]; then
         local devnet_chains
         mapfile -t devnet_chains < <(echo "$MARKETS_CONFIG_JSON" | jq -r '.[].powerloomChain.name | select(startswith("devnet"))' | sort -u)
         
@@ -355,17 +364,20 @@ select_market_and_configure() {
         done
     fi
 
-    local markets
-    mapfile -t markets < <(echo "$MARKETS_CONFIG_JSON" | jq -r ".[] | select(.powerloomChain.name == \"$selected_chain_name\") | .dataMarkets[].name" | sort)
-    echo "🔍 Select a data market on '$selected_chain_name':"
-    select market_choice in "${markets[@]}"; do
-        if [ -n "$market_choice" ]; then
-            selected_market_name="$market_choice"
-            break
-        else
-            echo "❌ Invalid selection. Please try again."
-        fi
-    done
+    # Skip market selection if BDS_DSV_DEVNET is true (already set above)
+    if [ "$BDS_DSV_DEVNET" != "true" ]; then
+        local markets
+        mapfile -t markets < <(echo "$MARKETS_CONFIG_JSON" | jq -r ".[] | select(.powerloomChain.name == \"$selected_chain_name\") | .dataMarkets[].name" | sort)
+        echo "🔍 Select a data market on '$selected_chain_name':"
+        select market_choice in "${markets[@]}"; do
+            if [ -n "$market_choice" ]; then
+                selected_market_name="$market_choice"
+                break
+            else
+                echo "❌ Invalid selection. Please try again."
+            fi
+        done
+    fi
 
     echo "✅ You selected: $selected_market_name on $selected_chain_name"
 

@@ -10,7 +10,7 @@ for arg in "$@"; do
         --dev-mode)
             DEV_MODE=true
             ;;
-        --dsv-devnet)
+        --bds-dsv-devnet)
             DEV_MODE=true
             DSV_DEVNET=true
             ;;
@@ -31,8 +31,8 @@ SETUP_RESULT_FILE="$SETUP_RESULT_DIR/setup_result"
 # Run setup container directly
 echo "🔧 Running setup container to configure environment..."
 if [ "$DSV_DEVNET" = "true" ]; then
-    echo "🚀 DSV Devnet mode enabled"
-    SETUP_ARGS="$SETUP_ARGS --devnet"
+    echo "🚀 BDS DSV Devnet mode enabled"
+    SETUP_ARGS="$SETUP_ARGS --bds-dsv-devnet"
 fi
 
 docker run --rm -it \
