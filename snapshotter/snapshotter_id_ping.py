@@ -115,19 +115,21 @@ async def use_existing_p2p_key():
 async def generate_libp2p_peer_id_from_key(private_key_hex: str) -> str:
     """
     Generate libp2p peer ID from the existing private key.
-    Uses the libp2p protobuf format for peer ID calculation.
+    Uses the libp2p protobuf format for peer ID calculation with proper multihash support.
     """
     try:
-        # Method 1: Use libp2p protobuf if available
+        # Method 1: Use libp2p protobuf with multihash and base58 (now available in pyproject.toml)
         try:
-            # Try to use multihash and protobuf libraries
             import multihash
+            import base58
             from hashlib import sha256
             from cryptography.hazmat.primitives.asymmetric import ed25519
             from cryptography.hazmat.primitives import serialization
 
+            print('🔧 Using multihash and base58 libraries for proper libp2p peer ID generation')
+
             # Derive Ed25519 private key from hex
-            # Take first 32 bytes (64 hex chars) as the Ed25519 private key
+            # Take first 32 bytes (64 hex chars) as the Ed25519 private key seed
             ed25519_private_bytes = bytes.fromhex(private_key_hex[:64])
             private_key = ed25519.Ed25519PrivateKey.from_private_bytes(ed25519_private_bytes)
 
@@ -138,7 +140,7 @@ async def generate_libp2p_peer_id_from_key(private_key_hex: str) -> str:
                 format=serialization.PublicFormat.Raw,
             )
 
-            # Prepend the Ed25519 public key prefix (0xed01)
+            # Prepend the Ed25519 public key prefix (0xed01) as per libp2p spec
             ed25519_prefix = bytes([0xed, 0x01])
             prefixed_pubkey = ed25519_prefix + public_bytes
 
@@ -148,38 +150,57 @@ async def generate_libp2p_peer_id_from_key(private_key_hex: str) -> str:
             # Create multihash from the SHA256 hash
             mh = multihash.encode(pubkey_hash, 'sha2-256')
 
-            # Convert to base58btc for peer ID format
-            import base58
-            peer_id_bytes = bytes([0x12, len(mh)]) + mh  # 0x12 = identity multihash code
+            # Convert to base58btc for proper libp2p peer ID format
+            # Identity multihash code (0x12) + length + multihash
+            peer_id_bytes = bytes([0x12, len(mh)]) + mh
             peer_id = base58.b58encode(peer_id_bytes).decode('utf-8')
 
-            print(f'✅ Generated libp2p peer ID using existing Ed25519 key')
+            print(f'✅ Generated proper libp2p peer ID using Ed25519 key: {peer_id}')
+            print(f'   Public key bytes: {public_bytes.hex()}')
+            print(f'   Prefixed public key: {prefixed_pubkey.hex()}')
+            print(f'   SHA256 hash: {pubkey_hash.hex()}')
+            print(f'   Multihash: {mh.hex()}')
+            print(f'   Peer ID bytes: {peer_id_bytes.hex()}')
+
+            # Validate peer ID format (should start with "12D3KooW" for Ed25519 keys)
+            if peer_id.startswith('12D3KooW'):
+                print(f'✅ Peer ID has correct Ed25519 format')
+            else:
+                print(f'⚠️  Peer ID does not have expected Ed25519 prefix, but may still be valid')
+
             return peer_id
 
-        except ImportError:
-            print('⚠️  multihash library not available, using simplified peer ID generation')
-
-        # Method 2: Simplified peer ID generation (fallback)
-        # This creates a valid-looking peer ID but may not be fully libp2p compatible
-        from hashlib import sha256
-        import base64
-
-        # Use SHA256 of private key as basis for peer ID
-        key_hash = sha256(bytes.fromhex(private_key_hex)).digest()
-
-        # Create a simple peer ID format (base64 encoded with prefix)
-        peer_id_base64 = base64.b64encode(key_hash).decode('utf-8')
-        peer_id = f"Qm{peer_id_base64[:46]}"  # Truncate to typical peer ID length
-
-        print(f'⚠️  Generated simplified peer ID from existing key (install libp2p libraries for full compatibility)')
-        return peer_id
+        except ImportError as import_error:
+            print(f'❌ Required libraries not available: {import_error}')
+            print('   Ensure multihash and base58 are installed via poetry')
+            raise import_error
 
     except Exception as e:
-        print(f'⚠️  Error generating peer ID from existing key: {e}')
-        # Return a placeholder peer ID for testing
-        placeholder_peer_id = f"QmPeerID{private_key_hex[:16]}"
-        print(f'⚠️  Using placeholder peer ID: {placeholder_peer_id}')
-        return placeholder_peer_id
+        print(f'❌ Error generating proper libp2p peer ID: {e}')
+        print('   Falling back to simplified peer ID generation for compatibility')
+
+        # Method 2: Simplified peer ID generation (fallback only if libraries fail)
+        try:
+            from hashlib import sha256
+            import base64
+
+            # Use SHA256 of private key as basis for peer ID
+            key_hash = sha256(bytes.fromhex(private_key_hex)).digest()
+
+            # Create a deterministic peer ID format
+            peer_id_base64 = base64.b64encode(key_hash).decode('utf-8')
+            peer_id = f"Qm{peer_id_base64[:46]}"  # Truncate to typical peer ID length
+
+            print(f'⚠️  Generated fallback peer ID: {peer_id}')
+            print('   ⚠️  This is not fully libp2p compatible - install dependencies for proper generation')
+            return peer_id
+
+        except Exception as fallback_error:
+            print(f'❌ Even fallback peer ID generation failed: {fallback_error}')
+            # Return a deterministic placeholder peer ID
+            placeholder_peer_id = f"12D3KooW{private_key_hex[:48]}"
+            print(f'⚠️  Using deterministic placeholder peer ID: {placeholder_peer_id}')
+            return placeholder_peer_id
 
 
 async def store_peer_id_in_shared_volume(peer_id: str):
@@ -213,81 +234,25 @@ async def store_peer_id_in_shared_volume(peer_id: str):
         print('   Private key already exists, so this is not a critical error')
 
 
-async def generate_p2p_private_key():
-    """
-    Generate Ed25519 private key for P2P communication and store it for local collector.
-    The key will be stored in Redis and/or written to a file for the local collector to use.
-    Also generates and stores the corresponding libp2p peer ID for smart contract registration.
-    """
-    try:
-        # Generate Ed25519 key pair using cryptography library
-        from cryptography.hazmat.primitives.asymmetric import ed25519
-        from cryptography.hazmat.primitives import serialization
-
-        # Generate Ed25519 key pair
-        private_key = ed25519.Ed25519PrivateKey.generate()
-
-        # Get raw 32-byte private key
-        private_bytes = private_key.private_bytes(
-            encoding=serialization.Encoding.Raw,
-            format=serialization.PrivateFormat.Raw,
-            encryption_algorithm=serialization.NoEncryption()
-        )
-
-        # Convert to 128-character hex string (64 bytes * 2 hex chars)
-        private_key_hex = private_bytes.hex() + secrets.token_hex(32)
-
-        # Get public key for peer ID calculation
-        public_key = private_key.public_key()
-        public_bytes = public_key.public_bytes(
-            encoding=serialization.Encoding.Raw,
-            format=serialization.PublicFormat.Raw,
-        )
-
-        print(f'✅ Generated P2P key pair using cryptography library')
-
-        # Validate key format
-        if len(private_key_hex) != 128 or not all(c in '0123456789abcdef' for c in private_key_hex.lower()):
-            raise ValueError(f"Invalid private key format: {len(private_key_hex)} characters, expected 128 hex chars")
-
-        print(f'🔑 Generated P2P private key (128 hex chars): {private_key_hex[:16]}...{private_key_hex[-16:]}')
-
-        # Generate libp2p peer ID
-        peer_id = await generate_libp2p_peer_id(private_key_hex, public_bytes)
-
-        print(f'🆔 Generated libp2p peer ID: {peer_id}')
-
-        # Store both private key and peer ID in shared volume
-        await store_p2p_key_in_shared_volume(private_key_hex, peer_id)
-
-        # Also store as environment variables for immediate use
-        os.environ['LOCAL_COLLECTOR_PRIVATE_KEY'] = private_key_hex
-        os.environ['LOCAL_COLLECTOR_PEER_ID'] = peer_id
-
-        print(f'💾 P2P private key and peer ID stored in shared volume for local collector')
-        print(f'📋 Peer ID ready for smart contract registration: {peer_id}')
-
-    except Exception as e:
-        print(f'❌ Failed to generate P2P private key: {e}')
-        print('   Manual setup required: Set LOCAL_COLLECTOR_PRIVATE_KEY (128 hex chars) in environment')
-        raise
 
 
 async def generate_libp2p_peer_id(private_key_hex: str, public_bytes: bytes = None) -> str:
     """
     Generate libp2p peer ID from the private key.
-    Uses the libp2p protobuf format for peer ID calculation.
+    Uses the libp2p protobuf format for peer ID calculation with proper multihash support.
     """
     try:
-        # Method 1: Use libp2p protobuf if available
+        # Method 1: Use libp2p protobuf with multihash and base58 (now available in pyproject.toml)
         try:
-            # Try to use multihash and protobuf libraries
             import multihash
+            import base58
             from hashlib import sha256
 
             if public_bytes:
                 # Use actual public key bytes from cryptography library
-                # Prepend the Ed25519 public key prefix (0xed01)
+                print('🔧 Using provided public key bytes for libp2p peer ID generation')
+
+                # Prepend the Ed25519 public key prefix (0xed01) as per libp2p spec
                 ed25519_prefix = bytes([0xed, 0x01])
                 prefixed_pubkey = ed25519_prefix + public_bytes
 
@@ -297,41 +262,57 @@ async def generate_libp2p_peer_id(private_key_hex: str, public_bytes: bytes = No
                 # Create multihash from the SHA256 hash
                 mh = multihash.encode(pubkey_hash, 'sha2-256')
 
-                # Convert to base58btc for peer ID format
-                import base58
-                peer_id_bytes = bytes([0x12, len(mh)]) + mh  # 0x12 = identity multihash code
+                # Convert to base58btc for proper libp2p peer ID format
+                # Identity multihash code (0x12) + length + multihash
+                peer_id_bytes = bytes([0x12, len(mh)]) + mh
                 peer_id = base58.b58encode(peer_id_bytes).decode('utf-8')
 
-                print(f'✅ Generated libp2p peer ID using multihash/protobuf')
+                print(f'✅ Generated proper libp2p peer ID using provided public key: {peer_id}')
+                print(f'   Public key bytes: {public_bytes.hex()}')
+                print(f'   Prefixed public key: {prefixed_pubkey.hex()}')
+                print(f'   SHA256 hash: {pubkey_hash.hex()}')
+                print(f'   Multihash: {mh.hex()}')
+                print(f'   Peer ID bytes: {peer_id_bytes.hex()}')
+
+                # Validate peer ID format
+                if peer_id.startswith('12D3KooW'):
+                    print(f'✅ Peer ID has correct Ed25519 format')
+                else:
+                    print(f'⚠️  Peer ID does not have expected Ed25519 prefix, but may still be valid')
+
                 return peer_id
 
-        except ImportError:
-            print('⚠️  multihash library not available, using simplified peer ID generation')
-
-        # Method 2: Simplified peer ID generation (fallback)
-        # This creates a valid-looking peer ID but may not be fully libp2p compatible
-        # In production, you should install proper libp2p/multihash libraries
-
-        # Create a deterministic peer ID from the private key
-        from hashlib import sha256
-        import base64
-
-        # Use SHA256 of private key as basis for peer ID
-        key_hash = sha256(bytes.fromhex(private_key_hex)).digest()
-
-        # Create a simple peer ID format (base64 encoded with prefix)
-        peer_id_base64 = base64.b64encode(key_hash).decode('utf-8')
-        peer_id = f"Qm{peer_id_base64[:46]}"  # Truncate to typical peer ID length
-
-        print(f'⚠️  Generated simplified peer ID (install libp2p libraries for full compatibility)')
-        return peer_id
+        except ImportError as import_error:
+            print(f'❌ Required libraries not available: {import_error}')
+            print('   Ensure multihash and base58 are installed via poetry')
+            raise import_error
 
     except Exception as e:
-        print(f'⚠️  Error generating peer ID: {e}')
-        # Return a placeholder peer ID for testing
-        placeholder_peer_id = f"QmPeerID{private_key_hex[:16]}"
-        print(f'⚠️  Using placeholder peer ID: {placeholder_peer_id}')
-        return placeholder_peer_id
+        print(f'❌ Error generating proper libp2p peer ID: {e}')
+        print('   Falling back to simplified peer ID generation for compatibility')
+
+        # Method 2: Simplified peer ID generation (fallback only if libraries fail)
+        try:
+            from hashlib import sha256
+            import base64
+
+            # Create a deterministic peer ID from the private key
+            key_hash = sha256(bytes.fromhex(private_key_hex)).digest()
+
+            # Create a simple peer ID format (base64 encoded with prefix)
+            peer_id_base64 = base64.b64encode(key_hash).decode('utf-8')
+            peer_id = f"Qm{peer_id_base64[:46]}"  # Truncate to typical peer ID length
+
+            print(f'⚠️  Generated fallback peer ID: {peer_id}')
+            print('   ⚠️  This is not fully libp2p compatible - install dependencies for proper generation')
+            return peer_id
+
+        except Exception as fallback_error:
+            print(f'❌ Even fallback peer ID generation failed: {fallback_error}')
+            # Return a deterministic placeholder peer ID
+            placeholder_peer_id = f"12D3KooW{private_key_hex[:48]}"
+            print(f'⚠️  Using deterministic placeholder peer ID: {placeholder_peer_id}')
+            return placeholder_peer_id
 
 
 async def store_p2p_key(private_key_hex: str, peer_id: str):

@@ -36,67 +36,143 @@ fi
 
 # Generate P2P private key if needed (for local collector integration)
 generate_p2p_key() {
-    echo "🔑 Checking P2P private key generation..."
+    echo "🔑 Checking P2P private key synchronization..."
 
-    # Only generate key if LOCAL_COLLECTOR_PRIVATE_KEY is not set
-    if [ -z "$LOCAL_COLLECTOR_PRIVATE_KEY" ]; then
-        # Check if P2P key already exists in shared volume
-        SHARED_KEY_FILE="/keys/p2p_private_key"
-        if [ -f "$SHARED_KEY_FILE" ]; then
-            # Read and validate existing key
-            VOLUME_KEY=$(cat "$SHARED_KEY_FILE" 2>/dev/null || echo "")
-            if [ -n "$VOLUME_KEY" ] && [ ${#VOLUME_KEY} -eq 128 ] && [[ "$VOLUME_KEY" =~ ^[0-9a-fA-F]+$ ]]; then
-                echo "✅ Found valid P2P key in shared volume"
-                export LOCAL_COLLECTOR_PRIVATE_KEY="$VOLUME_KEY"
-                return 0
-            else
-                echo "⚠️  Invalid P2P key found in shared volume, regenerating..."
-            fi
+    # Get namespace for env file naming
+    NAMESPACE=${FULL_NAMESPACE:-"default"}
+    ENV_FILE="/app/.env-${NAMESPACE}"
+    SHARED_KEY_FILE="/keys/p2p_private_key"
+    SHARED_KEYS_DIR="/keys"
+    mkdir -p "$SHARED_KEYS_DIR"
+
+    # Initialize variables
+    local env_key=""
+    local volume_key=""
+    local final_key=""
+
+    # 1. Read key from env file if it exists
+    if [ -f "$ENV_FILE" ]; then
+        env_key=$(grep "^LOCAL_COLLECTOR_PRIVATE_KEY=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2 | tr -d '"' | tr -d "'" || echo "")
+        if [ -n "$env_key" ]; then
+            echo "📄 Found P2P key in env file: ${env_key:0:16}..."
         fi
+    fi
 
-        echo "📝 Generating new P2P private key for local collector..."
+    # 2. Read key from shared volume if it exists
+    if [ -f "$SHARED_KEY_FILE" ]; then
+        volume_key=$(cat "$SHARED_KEY_FILE" 2>/dev/null || echo "")
+        if [ -n "$volume_key" ]; then
+            echo "💾 Found P2P key in shared volume: ${volume_key:0:16}..."
+        fi
+    fi
+
+    # 3. Validate keys if they exist
+    validate_key() {
+        local key="$1"
+        if [ -n "$key" ] && [ ${#key} -eq 128 ] && [[ "$key" =~ ^[0-9a-fA-F]+$ ]]; then
+            return 0
+        else
+            echo "⚠️  Invalid P2P key format (expected 128 hex chars)"
+            return 1
+        fi
+    }
+
+    local env_key_valid=false
+    local volume_key_valid=false
+
+    if validate_key "$env_key"; then
+        env_key_valid=true
+        echo "✅ Env file key is valid"
+    fi
+
+    if validate_key "$volume_key"; then
+        volume_key_valid=true
+        echo "✅ Volume key is valid"
+    fi
+
+    # 4. Determine final key based on precedence (env file > volume > generate)
+    if [ "$env_key_valid" = true ]; then
+        # Env file takes highest precedence over everything
+        echo "🔧 Using env file key (highest precedence)"
+        final_key="$env_key"
+    elif [ "$volume_key_valid" = true ]; then
+        # Volume key takes precedence over generation
+        echo "🔧 Using volume key (syncing to env file)"
+        final_key="$volume_key"
+    else
+        # Generate new key if no valid keys found anywhere
+        echo "📝 No valid P2P keys found, generating new key..."
 
         # Generate Ed25519 private key
         PRIVATE_KEY_OUTPUT=$(python3 scripts/generate_p2p_key.py 2>/dev/null)
 
         # Extract the private key from output
-        LOCAL_COLLECTOR_PRIVATE_KEY=$(echo "$PRIVATE_KEY_OUTPUT" | grep "LOCAL_COLLECTOR_PRIVATE_KEY=" | cut -d'=' -f2)
+        final_key=$(echo "$PRIVATE_KEY_OUTPUT" | grep "LOCAL_COLLECTOR_PRIVATE_KEY=" | cut -d'=' -f2 | tr -d '"' | tr -d "'")
 
-        if [ -z "$LOCAL_COLLECTOR_PRIVATE_KEY" ]; then
-            echo "⚠️  Failed to generate P2P key, local collector integration may not work"
+        if [ -z "$final_key" ] || ! validate_key "$final_key"; then
+            echo "❌ Failed to generate valid P2P key"
             return 1
         fi
 
-        # Validate key format
-        if [ ${#LOCAL_COLLECTOR_PRIVATE_KEY} -ne 128 ] || ! [[ "$LOCAL_COLLECTOR_PRIVATE_KEY" =~ ^[0-9a-fA-F]+$ ]]; then
-            echo "⚠️  Generated P2P key format is invalid, local collector integration may not work"
-            return 1
-        fi
-
-        echo "✅ Generated new P2P private key"
-
-        # Create shared volume directory
-        SHARED_KEYS_DIR="/keys"
-        mkdir -p "$SHARED_KEYS_DIR"
-
-        # Write private key to shared volume
-        echo "$LOCAL_COLLECTOR_PRIVATE_KEY" > "$SHARED_KEYS_DIR/p2p_private_key"
-        chmod 600 "$SHARED_KEYS_DIR/p2p_private_key"
-
-        # Create signal file to indicate key is ready
-        echo "Generated P2P key ready" > "$SHARED_KEYS_DIR/p2p_ready"
-        chmod 644 "$SHARED_KEYS_DIR/p2p_ready"
-
-        echo "✅ P2P key written to shared volume for local collector"
-
-        # Export for current session
-        export LOCAL_COLLECTOR_PRIVATE_KEY
-    else
-        echo "✅ Using existing LOCAL_COLLECTOR_PRIVATE_KEY"
+        echo "✅ Generated new P2P private key: ${final_key:0:16}..."
     fi
+
+    # 5. Synchronization logic - env file always overwrites volume
+    sync_needed=false
+
+    # Sync to environment variable
+    if [ "$LOCAL_COLLECTOR_PRIVATE_KEY" != "$final_key" ]; then
+        export LOCAL_COLLECTOR_PRIVATE_KEY="$final_key"
+        echo "🔄 Synced to environment variable"
+        sync_needed=true
+    fi
+
+    # Sync to env file (if not already there from precedence check)
+    if [ "$env_key" != "$final_key" ]; then
+        # Backup existing env file
+        if [ -f "$ENV_FILE" ]; then
+            cp "$ENV_FILE" "${ENV_FILE}.backup.$(date +%s)"
+        fi
+
+        # Remove old key if exists
+        if [ -n "$env_key" ] && [ -f "$ENV_FILE" ]; then
+            sed -i.bak '/^LOCAL_COLLECTOR_PRIVATE_KEY=/d' "$ENV_FILE"
+        fi
+
+        # Add new key
+        echo "LOCAL_COLLECTOR_PRIVATE_KEY=\"$final_key\"" >> "$ENV_FILE"
+        echo "🔄 Synced to env file: $ENV_FILE"
+        sync_needed=true
+    fi
+
+    # ALWAYS sync to shared volume (env file overwrites volume)
+    if [ "$volume_key" != "$final_key" ]; then
+        echo "$final_key" > "$SHARED_KEY_FILE"
+        chmod 600 "$SHARED_KEY_FILE"
+        echo "🔄 Overwrote shared volume with env file key: $SHARED_KEY_FILE"
+        sync_needed=true
+    fi
+
+    # 6. Create/update signal file
+    echo "P2P key synchronized: $(date)" > "$SHARED_KEYS_DIR/p2p_ready"
+    chmod 644 "$SHARED_KEYS_DIR/p2p_ready"
+
+    if [ "$sync_needed" = true ]; then
+        echo "✅ P2P key bidirectional synchronization completed"
+    else
+        echo "✅ P2P key already synchronized across all locations"
+    fi
+
+    echo "📋 Final P2P key status:"
+    echo "   Environment variable: ${LOCAL_COLLECTOR_PRIVATE_KEY:0:16}..."
+    echo "   Env file: $([ -f "$ENV_FILE" ] && echo "✅ $(grep LOCAL_COLLECTOR_PRIVATE_KEY "$ENV_FILE" | cut -d'=' -f2 | tr -d '"' | tr -d "'" | head -c 16)..." || echo "❌ Not found")"
+    echo "   Shared volume: $([ -f "$SHARED_KEY_FILE" ] && echo "✅ $(head -c 16 "$SHARED_KEY_FILE")..." || echo "❌ Not found")"
+    echo "   Signal file: $([ -f "$SHARED_KEYS_DIR/p2p_ready" ] && echo "✅ Ready" || echo "❌ Not ready")"
+
+    return 0
 }
 
-# Generate P2P key before config setup
+# Generate P2P private key if needed
 generate_p2p_key
 
 # Run autofill to setup config files

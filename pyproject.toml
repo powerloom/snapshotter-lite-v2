@@ -30,6 +30,7 @@ toml = "^0.10.2"
 cryptography = "^41.0.0"
 ifps-client = {git = "https://git@github.com/PowerLoom/py-ipfs-client.git"}
 rpc_helper = {git = "https://git@github.com/PowerLoom/rpc-helper.git", branch = "13-optional-rate-limiting-for-rpchelper"}
+base58 = "^2.1.1"
 
 [build-system]
 requires = ["poetry-core"]
