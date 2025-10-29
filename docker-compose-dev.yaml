@@ -10,6 +10,7 @@ services:
       - ${LOCAL_COLLECTOR_P2P_PORT}:${LOCAL_COLLECTOR_P2P_PORT}
     volumes:
       - ./shared-volume:/keys
+      - ./scripts/wait_for_p2p_key_and_start.sh:/app/wait_for_p2p_key_and_start.sh:ro
       - ./logs-collector-${FULL_NAMESPACE_LOWER}:/app/logs
       - ./logs-collector-${FULL_NAMESPACE_LOWER}/archive:/app/logs/archive
     environment:
@@ -25,7 +26,6 @@ services:
       - PUBLIC_IP=${PUBLIC_IP}
       - BOOTSTRAP_NODE_ADDR=$BOOTSTRAP_NODE_ADDR
       - LOCAL_COLLECTOR_P2P_PORT=${LOCAL_COLLECTOR_P2P_PORT:-8001}
-      - LOCAL_COLLECTOR_PRIVATE_KEY=${LOCAL_COLLECTOR_PRIVATE_KEY}
       - RENDEZVOUS_POINT=${RENDEZVOUS_POINT:-powerloom-snapshot-sequencer-network}
       - GOSSIPSUB_SNAPSHOT_SUBMISSION_PREFIX=${GOSSIPSUB_SNAPSHOT_SUBMISSION_PREFIX:-/powerloom/snapshot-submissions}
       - LIBP2P_LOGGING=debug
@@ -33,6 +33,10 @@ services:
     networks:
       - custom_network
     restart: on-failure:10
+    command: >
+      bash -c "
+        /app/wait_for_p2p_key_and_start.sh
+      "
   snapshotter-lite-v2:
     build: .
     container_name: snapshotter-lite-v2-${SLOT_ID}-${FULL_NAMESPACE}
