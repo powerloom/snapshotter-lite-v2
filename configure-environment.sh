@@ -139,7 +139,7 @@ has_jq() {
 extract_chain_config_jq() {
     local chain_name="$1"
     local market_name="$2"
-    
+
     if [ -z "$MARKETS_CONFIG_JSON" ]; then return 1; fi
     
     local jq_filter=".[] | select(.powerloomChain.name == \"$chain_name\") | { rpcURL: .powerloomChain.rpcURL, market: (.dataMarkets[]? | select(.name == \"$market_name\")) }"
@@ -326,7 +326,9 @@ select_market_and_configure() {
     # Auto-select BDS_DEVNET_ALPHA_UNISWAPV3 when BDS_DSV_DEVNET is enabled
     if [ "$BDS_DSV_DEVNET" = "true" ]; then
         echo "🚀 BDS DSV Devnet mode - auto-selecting BDS_DEVNET_ALPHA_UNISWAPV3 market"
-        selected_chain_name="DEVNET"
+        # Use same logic as manual devnet selection
+        local first_devnet_chain=$(echo "$MARKETS_CONFIG_JSON" | jq -r '.[].powerloomChain.name | select(startswith("devnet")) | select(. != null)' | head -1)
+        selected_chain_name="$first_devnet_chain"
         selected_market_name="BDS_DEVNET_ALPHA_UNISWAPV3"
         echo "✅ Selected chain: $selected_chain_name"
         echo "✅ Selected market: $selected_market_name"
