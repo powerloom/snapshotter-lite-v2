@@ -74,7 +74,7 @@ else
     test_namespace=true
 
     # Get the actual gRPC port from container's environment variables
-    actual_port=$(docker inspect "${container_name}" 2>/dev/null | jq -r '.[0].Config.Env[] | select(.Name=="LOCAL_COLLECTOR_PORT") | .Value')
+    actual_port=$(docker inspect "${container_name}" 2>/dev/null | grep -o 'LOCAL_COLLECTOR_PORT=[^,]*' | cut -d'=' -f2)
     if [ -n "$actual_port" ]; then
         echo "🔍 Collector container gRPC port: $actual_port"
 
