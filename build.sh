@@ -125,6 +125,18 @@ if [ "$DEV_MODE" != "true" ]; then
     fi 
     echo "🏗️ Running snapshotter-lite-v2 node Docker image with tag ${IMAGE_TAG}"
     echo "🏗️ Running snapshotter-lite-local-collector Docker image with tag ${LOCAL_COLLECTOR_IMAGE_TAG}"
+else
+    # clone the local collector repository
+    git clone https://github.com/powerloom/snapshotter-lite-local-collector.git snapshotter-lite-local-collector/
+    cd snapshotter-lite-local-collector/
+    # if bds-dsv-devnet is set, checkout the feat/gossipsub-submissions branch
+    if [ "$DSV_DEVNET" = "true" ]; then
+        git checkout feat/gossipsub-submissions
+    else
+        git checkout dockerify
+    fi
+    cd ../
+    echo "✅ Local collector repository cloned and checked out to ${BRANCH} branch"
 fi
 
 # Run collector test
