@@ -111,6 +111,7 @@ parse_config_vars() {
     SNAPSHOTTER_COMPUTE_REPO_BRANCH=""
     SNAPSHOTTER_COMPUTE_REPO_COMMIT=""
     SOURCE_CHAIN=""
+    BOOTSTRAP_NODE_ADDRS=""
     
     while IFS= read -r line; do
         if [ -n "$line" ] && [[ "$line" == *"="* ]]; then
@@ -122,9 +123,10 @@ parse_config_vars() {
                 SNAPSHOT_CONFIG_REPO_BRANCH=*) SNAPSHOT_CONFIG_REPO_BRANCH="${line#SNAPSHOT_CONFIG_REPO_BRANCH=}" ;; 
                 SNAPSHOT_CONFIG_REPO_COMMIT=*) SNAPSHOT_CONFIG_REPO_COMMIT="${line#SNAPSHOT_CONFIG_REPO_COMMIT=}" ;; 
                 SNAPSHOTTER_COMPUTE_REPO=*) SNAPSHOTTER_COMPUTE_REPO="${line#SNAPSHOTTER_COMPUTE_REPO=}" ;; 
-                SNAPSHOTTER_COMPUTE_REPO_BRANCH=*) SNAPSHOTTER_COMPUTE_REPO_BRANCH="${line#SNAPSHOTTER_COMPUTE_REPO_BRANCH=}" ;; 
-                SNAPSHOTTER_COMPUTE_REPO_COMMIT=*) SNAPSHOTTER_COMPUTE_REPO_COMMIT="${line#SNAPSHOTTER_COMPUTE_REPO_COMMIT=}" ;; 
-                SOURCE_CHAIN=*) SOURCE_CHAIN="${line#SOURCE_CHAIN=}" ;; 
+                SNAPSHOTTER_COMPUTE_REPO_BRANCH=*) SNAPSHOTTER_COMPUTE_REPO_BRANCH="${line#SNAPSHOTTER_COMPUTE_REPO_BRANCH=}" ;;
+                SNAPSHOTTER_COMPUTE_REPO_COMMIT=*) SNAPSHOTTER_COMPUTE_REPO_COMMIT="${line#SNAPSHOTTER_COMPUTE_REPO_COMMIT=}" ;;
+                SOURCE_CHAIN=*) SOURCE_CHAIN="${line#SOURCE_CHAIN=}" ;;
+                BOOTSTRAP_NODE_ADDRS=*) BOOTSTRAP_NODE_ADDRS="${line#BOOTSTRAP_NODE_ADDRS=}" ;; 
             esac
         fi
     done <<< "$config_output"
@@ -185,16 +187,10 @@ extract_chain_config_jq() {
         # Create comma-separated list of bootstrap nodes
         local bootstrap_addrs=$(echo "$bootstrap_nodes_json" | jq -r '.[]' | tr '\n' ',' | sed 's/,$//')
         echo "BOOTSTRAP_NODE_ADDRS=$bootstrap_addrs"
-
-        # Also set first node for any remaining references that expect single address
-        local first_bootstrap=$(echo "$bootstrap_nodes_json" | jq -r '.[0]')
-        echo "BOOTSTRAP_NODE_ADDR=$first_bootstrap"
-
         echo "🔗 Configured $bootstrap_count bootstrap nodes from sources.json"
     elif [ -n "$sequencer_addr" ]; then
         # Fallback to legacy sequencer field if no bootstrapNodes array
         echo "BOOTSTRAP_NODE_ADDRS=$sequencer_addr"
-        echo "BOOTSTRAP_NODE_ADDR=$sequencer_addr"
         echo "⚠️  Using legacy sequencer configuration (consider updating sources.json)"
     fi
 }
@@ -433,6 +429,11 @@ update_common_config() {
     update_or_append_var "DOCKER_NETWORK_NAME" "$DOCKER_NETWORK_NAME" "$env_file"
     update_or_append_var "CONNECTION_REFRESH_INTERVAL_SEC" "$CONNECTION_REFRESH_INTERVAL_SEC" "$env_file"
     update_or_append_var "TELEGRAM_NOTIFICATION_COOLDOWN" "$TELEGRAM_NOTIFICATION_COOLDOWN" "$env_file"
+
+    # Set bootstrap node configuration if available
+    if [ -n "$BOOTSTRAP_NODE_ADDRS" ]; then
+        update_or_append_var "BOOTSTRAP_NODE_ADDRS" "$BOOTSTRAP_NODE_ADDRS" "$env_file"
+    fi
 }
 
 # Function to handle credential updates
@@ -540,10 +541,6 @@ set_default_optional_variables() {
             BOOTSTRAP_ADDRS=$(grep "^BOOTSTRAP_NODE_ADDRS=" "$env_file" | cut -d'=' -f2)
             BOOTSTRAP_COUNT=$(echo "$BOOTSTRAP_ADDRS" | tr ',' '\n' | wc -l | tr -d ' ')
             echo "✅ BOOTSTRAP_NODE_ADDRS configured with $BOOTSTRAP_COUNT nodes: $BOOTSTRAP_ADDRS"
-        elif grep -q "^BOOTSTRAP_NODE_ADDR=" "$env_file"; then
-            BOOTSTRAP_ADDR=$(grep "^BOOTSTRAP_NODE_ADDR=" "$env_file" | cut -d'=' -f2)
-            echo "✅ BOOTSTRAP_NODE_ADDR configured (single node): $BOOTSTRAP_ADDR"
-            echo "💡 Consider upgrading to sources.json with bootstrapNodes array for multiple nodes"
         else
             echo "⚠️  No bootstrap node configuration found in $env_file"
             echo "   This should have been auto-fetched from curated-datamarkets sources.json"
