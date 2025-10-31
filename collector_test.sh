@@ -48,17 +48,20 @@ for host in "${hosts[@]}"; do
     
     if command -v nc &> /dev/null; then
         if nc -z "${host}" "${LOCAL_COLLECTOR_PORT}" 2>/dev/null; then
+            echo "Netcat test: Port ${LOCAL_COLLECTOR_PORT} is in use by another process"
             test_ping=true
             break
         fi
     elif command -v netcat &> /dev/null; then
         if netcat -z "${host}" "${LOCAL_COLLECTOR_PORT}" 2>/dev/null; then
+            echo "Netcat test: Port ${LOCAL_COLLECTOR_PORT} is in use by another process"
             test_ping=true
             break
         fi
     else
         # Pure bash TCP connection test - available on all systems
         if timeout 1 bash -c "</dev/tcp/${host}/${LOCAL_COLLECTOR_PORT}" 2>/dev/null; then
+            echo "Fallback bash test: Port ${LOCAL_COLLECTOR_PORT} is in use by another process"
             test_ping=true
             break
         fi
@@ -92,16 +95,19 @@ if [ "$test_ping" = true ] && [ "$test_namespace" = true ]; then
     echo "✅ Collector is running and reachable" 
     exit 100
 else
-    echo "⚠️  No active collector found - searching for available ports..."
+    echo "⚠️  No active collector found - searching for available ports from $CONFIGURED_PORT to 51050..."
     for port in $(seq $CONFIGURED_PORT 51050); do
+        echo "  ⏳ Testing port $port"
         port_is_free=false
         if [[ "$PORT_CHECK_CMD" == *"curl"* ]]; then
             if ! $PORT_CHECK_CMD "localhost:$port" 2>/dev/null; then
+                echo "Curl test: Port $port is free"
                 port_is_free=true
             fi
         else
             if ! $PORT_CHECK_CMD "localhost" "$port" 2>/dev/null; then
-                port_is_free=false
+                echo "Netcat/bash fallback test: Port $port is free"
+                port_is_free=true
             fi
         fi
         
