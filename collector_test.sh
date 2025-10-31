@@ -101,7 +101,7 @@ else
             fi
         else
             if ! $PORT_CHECK_CMD "localhost" "$port" 2>/dev/null; then
-                port_is_free=true
+                port_is_free=false
             fi
         fi
         
