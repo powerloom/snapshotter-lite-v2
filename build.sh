@@ -126,6 +126,10 @@ if [ "$DEV_MODE" != "true" ]; then
     echo "🏗️ Running snapshotter-lite-v2 node Docker image with tag ${IMAGE_TAG}"
     echo "🏗️ Running snapshotter-lite-local-collector Docker image with tag ${LOCAL_COLLECTOR_IMAGE_TAG}"
 else
+    # remove the local collector repository if it exists
+    if [ -d "snapshotter-lite-local-collector" ]; then
+        rm -rf snapshotter-lite-local-collector
+    fi
     # clone the local collector repository
     git clone https://github.com/powerloom/snapshotter-lite-local-collector.git snapshotter-lite-local-collector/
     cd snapshotter-lite-local-collector/
