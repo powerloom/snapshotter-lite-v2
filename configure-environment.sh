@@ -296,15 +296,29 @@ update_or_append_var() {
     local var_value="$2"
     local target_file="$3"
 
+    # Validate input parameters to prevent corruption
+    if [ -z "$var_name" ]; then
+        echo "❌ ERROR: Variable name cannot be empty"
+        return 1
+    fi
+
+    # Check for malformed assignments involving this variable
+    if grep -q "^[A-Z_][A-Z0-9_]*=.*${var_name}=" "$target_file"; then
+        echo "⚠️  WARNING: Found malformed assignment involving ${var_name}, fixing..."
+        sed -i.backup "/^[A-Z_][A-Z0-9_]*=.*${var_name}=/d" "$target_file"
+        rm -f "$target_file.backup"
+    fi
+
     if grep -q "^${var_name}=" "$target_file"; then
         local existing_var_value
-        existing_var_value=$(grep "^${var_name}=" "$target_file" | cut -d'=' -f2-)
+        existing_var_value=$(grep "^${var_name}=" "$target_file" | head -1 | cut -d'=' -f2-)
         if [ "$var_value" != "$existing_var_value" ]; then
             local masked_new=$(mask_sensitive_value "$var_name" "$var_value")
             echo "🔍 Updating $var_name in $target_file to: $masked_new"
-            local sed_safe_var_value=$(printf '%s
-' "$var_value" | sed -e 's/[\/&]/\\&/g')
-            sed -i".backup" "s#^${var_name}=.*#${var_name}=${sed_safe_var_value}#" "$target_file"
+            # Use exact pattern match to avoid corruption
+            sed -i.backup "/^${var_name}=/d" "$target_file"
+            echo "${var_name}=${var_value}" >> "$target_file"
+            rm -f "$target_file.backup"
         fi
     else
         local masked_value=$(mask_sensitive_value "$var_name" "$var_value")
@@ -495,7 +509,8 @@ set_default_optional_variables() {
             echo "🔔 GOSSIPSUB_SNAPSHOT_SUBMISSION_PREFIX not found in $env_file, setting to DSV devnet default"
         else
             # Update existing GOSSIPSUB to DSV version for devnet
-            sed -i.bak 's|^GOSSIPSUB_SNAPSHOT_SUBMISSION_PREFIX=.*|GOSSIPSUB_SNAPSHOT_SUBMISSION_PREFIX=/powerloom/dsv-devnet-alpha/snapshot-submissions|' "$env_file"
+            update_or_append_var "GOSSIPSUB_SNAPSHOT_SUBMISSION_PREFIX" "/powerloom/dsv-devnet-alpha/snapshot-submissions" "$env_file"
+            rm -f "$env_file.bak"
             echo "🔧 Updated GOSSIPSUB_SNAPSHOT_SUBMISSION_PREFIX for DSV devnet mode"
         fi
 
@@ -504,7 +519,8 @@ set_default_optional_variables() {
             echo "🔔 RENDEZVOUS_POINT not found in $env_file, setting to DSV devnet default"
         else
             # Update existing RENDEZVOUS_POINT to DSV version for devnet
-            sed -i.bak 's|^RENDEZVOUS_POINT=.*|RENDEZVOUS_POINT=powerloom-dsv-devnet-alpha|' "$env_file"
+            update_or_append_var "RENDEZVOUS_POINT" "powerloom-dsv-devnet-alpha" "$env_file"
+            rm -f "$env_file.bak"
             echo "🔧 Updated RENDEZVOUS_POINT for DSV devnet mode"
         fi
 
@@ -524,18 +540,7 @@ set_default_optional_variables() {
             echo "✅ LOCAL_COLLECTOR_PRIVATE_KEY already configured in $env_file"
         fi
 
-        # For BDS DSV devnet, remove empty PUBLIC_IP line to avoid dumping empty line
-        if grep -q "^PUBLIC_IP=$" "$env_file"; then
-            # Use temporary file for compatibility across systems
-            grep -v "^PUBLIC_IP=$" "$env_file" > "${env_file}.tmp" && mv "${env_file}.tmp" "$env_file"
-            echo "✅ Removed empty PUBLIC_IP line for BDS DSV devnet setup"
-        elif grep -q "^PUBLIC_IP=" "$env_file"; then
-            echo "✅ PUBLIC_IP already configured in $env_file"
-        else
-            echo "🌐 PUBLIC_IP is optional for P2P discovery - leaving unset"
-            echo "   To set manually: Add PUBLIC_IP=<your_public_ip> to $env_file"
-        fi
-
+  
         # Validate bootstrap node configuration for DSV devnet
         if grep -q "^BOOTSTRAP_NODE_ADDRS=" "$env_file"; then
             BOOTSTRAP_ADDRS=$(grep "^BOOTSTRAP_NODE_ADDRS=" "$env_file" | cut -d'=' -f2)
@@ -574,10 +579,7 @@ main() {
         if [ -f "$ENV_FILE_PATH" ]; then
             echo "🟢 Found existing environment file: $ENV_FILE_PATH"
             echo "🔧 Checking for and fixing known formatting issues in $ENV_FILE_PATH..."
-            # Fix for previous bug that added spaces around '='
-            sed -i.bak 's/ *= */=/g' "$ENV_FILE_PATH"
-            # Fix for previous bug that may have created lines starting with '='
-            sed -i.bak '/^=/d' "$ENV_FILE_PATH"
+            # Removed problematic sed commands that may cause corruption in Alpine environment
 
             echo "🔔 Updating file with latest configuration from selected market."
             # Source existing file to not lose credentials
@@ -626,6 +628,9 @@ main() {
     done
 
     if [ "$SETUP_COMPLETE" = true ]; then
+        # Clean up any remaining backup files
+        find "$(dirname "$ENV_FILE_PATH")" -name "*.backup" -type f -delete 2>/dev/null || true
+
         echo "✅ Configuration complete. Environment file ready at $ENV_FILE_PATH"
 
         # Note: P2P private key will be generated after setup container completes
