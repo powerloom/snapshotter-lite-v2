@@ -12,7 +12,7 @@ DOCKER_MODE=false
 RESULT_FILE=""
 
 # GitHub configuration URL
-MARKETS_CONFIG_URL="https://raw.githubusercontent.com/powerloom/curated-datamarkets/main/sources.json"
+MARKETS_CONFIG_URL="https://raw.githubusercontent.com/powerloom/curated-datamarkets/chore/mod-dsv-devnet-bootstrap/sources.json"
 
 # Dynamic defaults (will be populated from GitHub API)
 DEFAULT_POWERLOOM_CHAIN=""
