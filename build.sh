@@ -84,20 +84,54 @@ if ! grep -q "^[[:space:]]*LOCAL_COLLECTOR_PRIVATE_KEY=" "$SELECTED_ENV_FILE"; t
     echo ""
     echo "🔑 Generating P2P private key on host system..."
 
-    # Run key generator in Docker and capture output
-    docker run --rm -v "$(pwd)/keygen:/app" -w /app golang:1.24-alpine sh -c "go mod download && go run generate_key.go" > /tmp/keygen_output 2>&1
+    # Create temporary file for key generator output
+    TEMP_KEYGEN_OUTPUT=$(mktemp)
+    echo "   Using temporary file: $TEMP_KEYGEN_OUTPUT"
 
-    # Extract the key from output
-    PRIVATE_KEY=$(grep "Generated Private Key (hex):" /tmp/keygen_output | awk '{print $5}' | head -1)
-    if [ -n "$PRIVATE_KEY" ] && [ ${#PRIVATE_KEY} -eq 128 ]; then
-        echo "LOCAL_COLLECTOR_PRIVATE_KEY=$PRIVATE_KEY" >> "$SELECTED_ENV_FILE"
-        echo "✅ P2P private key generated and added to environment file"
+    # Run key generator in Docker and capture output
+    if docker run --rm -v "$(pwd)/keygen:/app" -w /app golang:1.24-alpine sh -c "go mod download && go run generate_key.go" > "$TEMP_KEYGEN_OUTPUT" 2>&1; then
+        echo "   ✅ Key generator container executed successfully"
     else
-        echo "❌ Failed to extract valid P2P key from generator output"
-        echo "   Output: $(cat /tmp/keygen_output 2>/dev/null || echo 'No output file')"
+        echo "   ❌ Key generator container failed"
+        echo "   Output: $(cat "$TEMP_KEYGEN_OUTPUT" 2>/dev/null || echo 'No output file')"
+        rm -f "$TEMP_KEYGEN_OUTPUT"
         exit 1
     fi
-    rm -f /tmp/keygen_output
+
+    # Extract the key from output - try multiple methods
+    echo "   🔍 Extracting private key from output..."
+
+    # Method 1: Look for the exact expected format
+    PRIVATE_KEY=$(grep "Generated Private Key (hex):" "$TEMP_KEYGEN_OUTPUT" | awk '{print $5}' | head -1)
+
+    # Method 2: Fallback to grep with sed if Method 1 fails
+    if [ -z "$PRIVATE_KEY" ] || [ ${#PRIVATE_KEY} -ne 128 ]; then
+        PRIVATE_KEY=$(grep "Generated Private Key (hex):" "$TEMP_KEYGEN_OUTPUT" | sed 's/.*: //' | awk '{print $1}' | head -1)
+    fi
+
+    # Method 3: Final fallback - extract any 128-character hex string
+    if [ -z "$PRIVATE_KEY" ] || [ ${#PRIVATE_KEY} -ne 128 ]; then
+        PRIVATE_KEY=$(grep -o "[a-fA-F0-9]\{128\}" "$TEMP_KEYGEN_OUTPUT" | head -1)
+    fi
+
+    # Validate the extracted key
+    if [ -n "$PRIVATE_KEY" ] && [ ${#PRIVATE_KEY} -eq 128 ] && [[ "$PRIVATE_KEY" =~ ^[a-fA-F0-9]{128}$ ]]; then
+        echo "LOCAL_COLLECTOR_PRIVATE_KEY=$PRIVATE_KEY" >> "$SELECTED_ENV_FILE"
+        echo "✅ P2P private key generated and added to environment file"
+        echo "   Key: ${PRIVATE_KEY:0:8}...${PRIVATE_KEY: -8}"
+    else
+        echo "❌ Failed to extract valid P2P key from generator output"
+        echo "   Expected: 128-character hex string"
+        echo "   Got: ${#PRIVATE_KEY} characters: '${PRIVATE_KEY:0:16}...'"
+        echo "   Full output:"
+        cat "$TEMP_KEYGEN_OUTPUT" 2>/dev/null || echo "   No output file found"
+        echo ""
+        echo "   🔧 Debugging - Checking generator output patterns:"
+        grep -i "private\|key\|generated\|error" "$TEMP_KEYGEN_OUTPUT" 2>/dev/null || echo "   No matching patterns found"
+        rm -f "$TEMP_KEYGEN_OUTPUT"
+        exit 1
+    fi
+    rm -f "$TEMP_KEYGEN_OUTPUT"
 else
     echo "✅ P2P private key already exists in environment file"
 fi
@@ -133,14 +167,10 @@ else
     # clone the local collector repository
     git clone https://github.com/powerloom/snapshotter-lite-local-collector.git snapshotter-lite-local-collector/
     cd snapshotter-lite-local-collector/
-    # if bds-dsv-devnet is set, checkout the feat/gossipsub-submissions branch
-    if [ "$DSV_DEVNET" = "true" ]; then
-        git checkout feat/gossipsub-submissions
-    else
-        git checkout dockerify
-    fi
+    # Use dsv-p2p branch which has health check endpoints and all improvements
+    git checkout dsv-p2p
     cd ../
-    echo "✅ Local collector repository cloned and checked out to ${BRANCH} branch"
+    echo "✅ Local collector repository cloned and checked out to dsv-p2p branch"
 fi
 
 # Run collector test
