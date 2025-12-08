@@ -8,6 +8,7 @@ services:
     ports:
       - ${LOCAL_COLLECTOR_PORT}:${LOCAL_COLLECTOR_PORT}
       - ${LOCAL_COLLECTOR_P2P_PORT:-8001}:${LOCAL_COLLECTOR_P2P_PORT:-8001}
+      - ${LOCAL_COLLECTOR_HEALTH_CHECK_PORT:-8080}:${LOCAL_COLLECTOR_HEALTH_CHECK_PORT:-8080}
     volumes:
       - ./logs-collector-${FULL_NAMESPACE_LOWER}:/app/logs
       - ./logs-collector-${FULL_NAMESPACE_LOWER}/archive:/app/logs/archive
@@ -26,6 +27,8 @@ services:
       - PUBLIC_IP=${PUBLIC_IP}
       - RENDEZVOUS_POINT=${RENDEZVOUS_POINT:-powerloom-snapshot-sequencer-network}
       - GOSSIPSUB_SNAPSHOT_SUBMISSION_PREFIX=${GOSSIPSUB_SNAPSHOT_SUBMISSION_PREFIX:-/powerloom/snapshot-submissions}
+      - HEALTH_CHECK_PORT=${LOCAL_COLLECTOR_HEALTH_CHECK_PORT:-8080}
+      - SLACK_WEBHOOK_URL=${LOCAL_COLLECTOR_SLACK_WEBHOOK_URL}
     networks:
       - custom_network
     deploy:

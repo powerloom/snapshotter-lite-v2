@@ -165,17 +165,18 @@ handle_docker_pull() {
                 echo "📥 Cloning local collector repository from $LOCAL_COLLECTOR_REPO_URL"
                 git clone "$LOCAL_COLLECTOR_REPO_URL" "$LOCAL_COLLECTOR_DIR"
                 cd "$LOCAL_COLLECTOR_DIR"
-                echo "🌿 Checking out feat/gossipsub-submissions branch"
-                git checkout feat/gossipsub-submissions
+                echo "🌿 Checking out dsv-p2p branch"
+                git checkout dsv-p2p
                 cd ../
-                echo "✅ Local collector repository cloned and checked out to feat/gossipsub-submissions branch"
+                echo "✅ Local collector repository cloned and checked out to dsv-p2p branch"
             else
                 echo "📁 Local collector directory already exists, skipping clone"
                 cd "$LOCAL_COLLECTOR_DIR"
                 CURRENT_BRANCH=$(git branch --show-current)
-                if [ "$CURRENT_BRANCH" != "feat/gossipsub-submissions" ]; then
-                    echo "🌿 Switching to feat/gossipsub-submissions branch"
-                    git checkout feat/gossipsub-submissions
+                DSV_P2P_BRANCH="dsv-p2p"
+                if [ "$CURRENT_BRANCH" != "$DSV_P2P_BRANCH" ]; then
+                    echo "🌿 Switching to dsv-p2p branch"
+                    git checkout "$DSV_P2P_BRANCH"
                 fi
                 cd ../
             fi

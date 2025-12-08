@@ -6,6 +6,7 @@ services:
     ports:
       - "127.0.0.1:${LOCAL_COLLECTOR_PORT:-50051}:${LOCAL_COLLECTOR_PORT:-50051}"
       - "127.0.0.1:${LOCAL_COLLECTOR_P2P_PORT:-8001}:${LOCAL_COLLECTOR_P2P_PORT:-8001}"
+      - "127.0.0.1:${LOCAL_COLLECTOR_HEALTH_CHECK_PORT:-8080}:${LOCAL_COLLECTOR_HEALTH_CHECK_PORT:-8080}"
     volumes:
       - ./logs-collector-${FULL_NAMESPACE_LOWER}:/app/logs
       - ./logs-collector-${FULL_NAMESPACE_LOWER}/archive:/app/logs/archive
@@ -25,6 +26,8 @@ services:
       - LOCAL_COLLECTOR_P2P_PORT=${LOCAL_COLLECTOR_P2P_PORT:-8001}
       - RENDEZVOUS_POINT=${RENDEZVOUS_POINT:-powerloom-snapshot-sequencer-network}
       - GOSSIPSUB_SNAPSHOT_SUBMISSION_PREFIX=${GOSSIPSUB_SNAPSHOT_SUBMISSION_PREFIX:-/powerloom/snapshot-submissions}
+      - HEALTH_CHECK_PORT=${LOCAL_COLLECTOR_HEALTH_CHECK_PORT:-8080}
+      - SLACK_WEBHOOK_URL=${LOCAL_COLLECTOR_SLACK_WEBHOOK_URL}
       - LIBP2P_LOGGING=debug
       - LOG_FILE=/app/logs/collector.log
     networks:
