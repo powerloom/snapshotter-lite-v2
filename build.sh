@@ -168,9 +168,9 @@ else
     git clone https://github.com/powerloom/snapshotter-lite-local-collector.git snapshotter-lite-local-collector/
     cd snapshotter-lite-local-collector/
     # Use dsv-p2p branch which has health check endpoints and all improvements
-    git checkout dsv-p2p
+    git checkout dsv-p2p-autorelay
     cd ../
-    echo "✅ Local collector repository cloned and checked out to dsv-p2p branch"
+    echo "✅ Local collector repository cloned and checked out to dsv-p2p-autorelay branch"
 fi
 
 # Run collector test
