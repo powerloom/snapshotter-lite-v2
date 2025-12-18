@@ -167,10 +167,10 @@ else
     # clone the local collector repository
     git clone https://github.com/powerloom/snapshotter-lite-local-collector.git snapshotter-lite-local-collector/
     cd snapshotter-lite-local-collector/
-    # Use feat/dsv-p2p-autorelay branch which has health check endpoints and all improvements
-    git checkout feat/dsv-p2p-autorelay
+    # Use dockerify branch for dev mdoe
+    git checkout dockerify
     cd ../
-    echo "✅ Local collector repository cloned and checked out to feat/dsv-p2p-autorelay branch"
+    echo "✅ Local collector repository cloned and checked out to dockerify branch"
 fi
 
 # Run collector test
