@@ -35,7 +35,7 @@ if [ "$DSV_DEVNET" = "true" ]; then
     SETUP_ARGS="$SETUP_ARGS --bds-dsv-devnet"
 fi
 
-docker run --rm -it \
+docker run --rm \
     -v "$(pwd):/app" \
     -v "$SETUP_RESULT_DIR:/tmp/setup_result_dir" \
     -w /app \
@@ -91,12 +91,50 @@ if ! grep -q "^[[:space:]]*LOCAL_COLLECTOR_PRIVATE_KEY=" "$SELECTED_ENV_FILE"; t
     TEMP_KEYGEN_OUTPUT=$(mktemp)
     echo "   Using temporary file: $TEMP_KEYGEN_OUTPUT"
 
+    # Check if keygen directory exists
+    if [ ! -d "keygen" ]; then
+        echo "   ❌ Keygen directory not found at $(pwd)/keygen"
+        echo "   Current directory: $(pwd)"
+        rm -f "$TEMP_KEYGEN_OUTPUT"
+        exit 1
+    fi
+
+    # Use golang:1.24-alpine (matches go.mod version)
+    GO_IMAGE="golang:1.24-alpine"
+    echo "   Using Go image: $GO_IMAGE"
+    
+    # Pre-pull the image to avoid hanging during run if image needs to be downloaded
+    echo "   Ensuring Go image is available..."
+    if ! docker image inspect "$GO_IMAGE" >/dev/null 2>&1; then
+        echo "   Pulling Go image (this may take a moment)..."
+        docker pull "$GO_IMAGE" || {
+            echo "   ❌ Failed to pull Go image"
+            rm -f "$TEMP_KEYGEN_OUTPUT"
+            exit 1
+        }
+    fi
+    
     # Run key generator in Docker and capture output
-    if docker run --rm -v "$(pwd)/keygen:/app" -w /app golang:1.24-alpine sh -c "go mod download && go run generate_key.go" > "$TEMP_KEYGEN_OUTPUT" 2>&1; then
+    # Note: go mod download may take time on first run, but should complete
+    echo "   Running key generator (downloading dependencies if needed)..."
+    echo "   (This may take 30-60 seconds on first run while downloading Go modules)"
+    if docker run --rm \
+        -v "$(pwd)/keygen:/app" \
+        -w /app \
+        "$GO_IMAGE" \
+        sh -c "go mod download && go run generate_key.go" > "$TEMP_KEYGEN_OUTPUT" 2>&1; then
         echo "   ✅ Key generator container executed successfully"
     else
-        echo "   ❌ Key generator container failed"
-        echo "   Output: $(cat "$TEMP_KEYGEN_OUTPUT" 2>/dev/null || echo 'No output file')"
+        EXIT_CODE=$?
+        echo "   ❌ Key generator container failed (exit code: $EXIT_CODE)"
+        echo "   Output:"
+        cat "$TEMP_KEYGEN_OUTPUT" 2>/dev/null || echo "   No output file found"
+        echo ""
+        echo "   🔧 Troubleshooting:"
+        echo "   - Check if Docker is running: docker ps"
+        echo "   - Check if Go image exists: docker pull $GO_IMAGE"
+        echo "   - Verify keygen directory: ls -la $(pwd)/keygen"
+        echo "   - Check network connectivity (go mod download requires internet)"
         rm -f "$TEMP_KEYGEN_OUTPUT"
         exit 1
     fi
