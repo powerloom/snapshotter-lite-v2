@@ -1,6 +1,8 @@
 services:
   snapshotter-lite-local-collector:
-    image: snapshotter-lite-local-collector
+    build:
+      context: ./snapshotter-lite-local-collector
+      dockerfile: Dockerfile
     container_name: snapshotter-lite-local-collector-${FULL_NAMESPACE}
     profiles: ["local-collector"]
     ports:
@@ -14,12 +16,6 @@ services:
       - DATA_MARKET_CONTRACT=$DATA_MARKET_CONTRACT
       - LOCAL_COLLECTOR_PORT=$LOCAL_COLLECTOR_PORT
       - LOCAL_COLLECTOR_PRIVATE_KEY=$LOCAL_COLLECTOR_PRIVATE_KEY
-      - MAX_STREAM_POOL_SIZE=$MAX_STREAM_POOL_SIZE
-      - STREAM_HEALTH_CHECK_TIMEOUT_MS=$STREAM_HEALTH_CHECK_TIMEOUT_MS
-      - STREAM_WRITE_TIMEOUT_MS=$STREAM_WRITE_TIMEOUT_MS
-      - MAX_WRITE_RETRIES=$MAX_WRITE_RETRIES
-      - MAX_CONCURRENT_WRITES=$MAX_CONCURRENT_WRITES
-      - DATA_MARKET_IN_REQUEST=$DATA_MARKET_IN_REQUEST
       - LOG_LEVEL=${LOG_LEVEL:-4}
       - PUBLIC_IP=${PUBLIC_IP}
       - BOOTSTRAP_NODE_ADDRS=${BOOTSTRAP_NODE_ADDRS}
@@ -29,12 +25,34 @@ services:
       - HEALTH_CHECK_PORT=${LOCAL_COLLECTOR_HEALTH_CHECK_PORT:-8080}
       - SLACK_WEBHOOK_URL=${LOCAL_COLLECTOR_SLACK_WEBHOOK_URL}
       # Connection manager configuration (required for dsv-p2p branch)
-      - CONN_MANAGER_LOW_WATER=${CONN_MANAGER_LOW_WATER:-100}
-      - CONN_MANAGER_HIGH_WATER=${CONN_MANAGER_HIGH_WATER:-400}
-      # Stream pool configuration
+      # CRITICAL: DSV nodes serve thousands of snapshotter peers (local collectors)
+      # These limits must be high enough to prevent pruning publishers
+      - CONN_MANAGER_LOW_WATER=${CONN_MANAGER_LOW_WATER:-2000}
+      - CONN_MANAGER_HIGH_WATER=${CONN_MANAGER_HIGH_WATER:-5000}
+      # Stream Pool Configuration (for centralized sequencer)
+      - MAX_STREAM_POOL_SIZE=${MAX_STREAM_POOL_SIZE:-2}
+      - MAX_STREAM_QUEUE_SIZE=${MAX_STREAM_QUEUE_SIZE:-1000}
+      - STREAM_HEALTH_CHECK_TIMEOUT_MS=${STREAM_HEALTH_CHECK_TIMEOUT_MS:-5000}
+      - STREAM_WRITE_TIMEOUT_MS=${STREAM_WRITE_TIMEOUT_MS:-5000}
+      - MAX_WRITE_RETRIES=${MAX_WRITE_RETRIES:-3}
+      - MAX_CONCURRENT_WRITES=${MAX_CONCURRENT_WRITES:-10}
       - STREAM_POOL_HEALTH_CHECK_INTERVAL=${STREAM_POOL_HEALTH_CHECK_INTERVAL:-60000}
       - CONNECTION_REFRESH_INTERVAL_SEC=${CONNECTION_REFRESH_INTERVAL_SEC:-300}
       - WRITE_SEMAPHORE_TIMEOUT_SEC=${WRITE_SEMAPHORE_TIMEOUT_SEC:-5}
+      # Centralized Sequencer Control
+      # Set to "false" to disable all submissions to centralized sequencer (mesh-only mode)
+      # Set to "true" to enable dual submission (both centralized sequencer and mesh)
+      - CENTRALIZED_SEQUENCER_ENABLED=${CENTRALIZED_SEQUENCER_ENABLED:-false}
+      # Mesh Submission Concurrency Controls
+      # Rate limiting for mesh submissions to prevent overwhelming the gossipsub network
+      - MESH_SUBMISSION_RATE_LIMIT=${MESH_SUBMISSION_RATE_LIMIT:-100}
+      - MESH_SUBMISSION_BURST_SIZE=${MESH_SUBMISSION_BURST_SIZE:-200}
+      # Maximum concurrent mesh publish operations (goroutine limit)
+      - MAX_MESH_PUBLISH_GOROUTINES=${MAX_MESH_PUBLISH_GOROUTINES:-500}
+      # Maximum queued mesh submissions when rate limited
+      - MESH_PUBLISH_QUEUE_SIZE=${MESH_PUBLISH_QUEUE_SIZE:-1000}
+      # Other Configuration
+      - DATA_MARKET_IN_REQUEST=${DATA_MARKET_IN_REQUEST:-true}
       - LIBP2P_LOGGING=debug
       - LOG_FILE=/app/logs/collector.log
     networks:

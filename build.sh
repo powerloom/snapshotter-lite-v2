@@ -167,10 +167,15 @@ else
     # clone the local collector repository
     git clone https://github.com/powerloom/snapshotter-lite-local-collector.git snapshotter-lite-local-collector/
     cd snapshotter-lite-local-collector/
-    # Use dockerify branch for dev mdoe
-    git checkout dockerify
+    # Use feat/dsv-p2p-autorelay-central-seq-off branch for BDS DSV devnet, otherwise dockerify
+    if [ "$DSV_DEVNET" = "true" ]; then
+        git checkout feat/dsv-p2p-autorelay-central-seq-off
+        echo "✅ Local collector repository cloned and checked out to feat/dsv-p2p-autorelay-central-seq-off branch (BDS DSV devnet)"
+    else
+        git checkout dockerify
+        echo "✅ Local collector repository cloned and checked out to dockerify branch"
+    fi
     cd ../
-    echo "✅ Local collector repository cloned and checked out to dockerify branch"
 fi
 
 # Run collector test
