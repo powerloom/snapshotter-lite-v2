@@ -42,8 +42,11 @@ docker run --rm -it \
     snapshotter-lite-setup:latest \
     bash -c "./configure-environment.sh $SETUP_ARGS --docker-mode --result-file /tmp/setup_result_dir/setup_result"
 
-# Remove the setup container image
-docker rmi snapshotter-lite-setup:latest
+# Remove the setup container image (non-fatal - may fail if other containers are using it)
+# This is safe to ignore in multi-slot deployments where multiple instances may share the image
+if ! docker rmi snapshotter-lite-setup:latest 2>/dev/null; then
+    echo "ℹ️  Setup container image still in use by other containers - skipping removal (this is safe)"
+fi
 
 # Check if setup was successful by reading the result file
 if [ -f "$SETUP_RESULT_FILE" ] && [ -s "$SETUP_RESULT_FILE" ]; then
