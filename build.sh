@@ -115,11 +115,12 @@ if ! grep -q "^[[:space:]]*LOCAL_COLLECTOR_PRIVATE_KEY=" "$SELECTED_ENV_FILE"; t
     fi
     
     # Run key generator in Docker and capture output
-    # Note: go mod download may take time on first run, but should complete
-    echo "   Running key generator (downloading dependencies if needed)..."
-    echo "   (This may take 30-60 seconds on first run while downloading Go modules)"
+    # Use Go module cache volume to speed up builds (dependencies cached between runs)
+    echo "   Running key generator (downloading dependencies on first run)..."
     if docker run --rm \
         -v "$(pwd)/keygen:/app" \
+        -v go-mod-cache:/go/pkg/mod \
+        -e GOMODCACHE=/go/pkg/mod \
         -w /app \
         "$GO_IMAGE" \
         sh -c "go mod download && go run generate_key.go" > "$TEMP_KEYGEN_OUTPUT" 2>&1; then
