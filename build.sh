@@ -220,7 +220,7 @@ if [ "$DEV_MODE" != "true" ]; then
     echo "🏗️ Running snapshotter-lite-v2 node Docker image with tag ${IMAGE_TAG}"
     echo "🏗️ Running snapshotter-lite-local-collector Docker image with tag ${LOCAL_COLLECTOR_IMAGE_TAG}"
 else
-    # Only clone local collector repository if NO_COLLECTOR is not set
+    # Clone local collector repository if NO_COLLECTOR is not set
     if [ "$NO_COLLECTOR" != "true" ]; then
         # remove the local collector repository if it exists
         if [ -d "snapshotter-lite-local-collector" ]; then
@@ -229,17 +229,19 @@ else
         # clone the local collector repository
         git clone https://github.com/powerloom/snapshotter-lite-local-collector.git snapshotter-lite-local-collector/
         cd snapshotter-lite-local-collector/
-        # Use experimental branch for BDS DSV devnet/mainnet, otherwise dockerify
+        
+        # Default to dockerify branch
+        git checkout dockerify
+        echo "✅ Local collector repository cloned and checked out to dockerify branch"
+        
+        # Switch to experimental branch for BDS DSV alpha deployments
         if [ "$DSV_DEVNET" = "true" ] || [ "$DSV_MAINNET_ALPHA" = "true" ]; then
             git checkout experimental
             if [ "$DSV_DEVNET" = "true" ]; then
-                echo "✅ Local collector repository cloned and checked out to experimental branch (BDS DSV devnet)"
+                echo "✅ Switched to experimental branch (BDS DSV devnet)"
             else
-                echo "✅ Local collector repository cloned and checked out to experimental branch (BDS DSV mainnet alpha)"
+                echo "✅ Switched to experimental branch (BDS DSV mainnet alpha)"
             fi
-        else
-            git checkout dockerify
-            echo "✅ Local collector repository cloned and checked out to dockerify branch"
         fi
         cd ../
     else
