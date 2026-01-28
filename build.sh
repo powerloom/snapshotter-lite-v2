@@ -3,6 +3,8 @@
 # Parse arguments to check for dev mode and other flags
 DEV_MODE=false
 DSV_DEVNET=false
+DSV_MAINNET_ALPHA=false
+NO_COLLECTOR=false
 SETUP_ARGS=""
 
 for arg in "$@"; do
@@ -13,6 +15,14 @@ for arg in "$@"; do
         --bds-dsv-devnet)
             DEV_MODE=true
             DSV_DEVNET=true
+            ;;
+        --bds-dsv-mainnet-alpha)
+            DEV_MODE=true
+            DSV_MAINNET_ALPHA=true
+            ;;
+        --no-collector)
+            NO_COLLECTOR=true
+            SETUP_ARGS="$SETUP_ARGS $arg"
             ;;
         *)
             SETUP_ARGS="$SETUP_ARGS $arg"
@@ -33,6 +43,9 @@ echo "🔧 Running setup container to configure environment..."
 if [ "$DSV_DEVNET" = "true" ]; then
     echo "🚀 BDS DSV Devnet mode enabled"
     SETUP_ARGS="$SETUP_ARGS --bds-dsv-devnet"
+elif [ "$DSV_MAINNET_ALPHA" = "true" ]; then
+    echo "🚀 BDS DSV Mainnet Alpha mode enabled"
+    SETUP_ARGS="$SETUP_ARGS --bds-dsv-mainnet-alpha"
 fi
 
 docker run --rm \
@@ -67,10 +80,15 @@ else
     exit 1
 fi
 
-# Source the environment file, preserving the command-line DEV_MODE setting
+# Source the environment file, preserving the command-line DEV_MODE and NO_COLLECTOR settings
 dev_mode_from_flag=$DEV_MODE
+no_collector_from_flag=$NO_COLLECTOR
 source "$SELECTED_ENV_FILE"
 DEV_MODE=$dev_mode_from_flag
+# Use command-line NO_COLLECTOR if set, otherwise use value from env file
+if [ "$no_collector_from_flag" = "true" ]; then
+    NO_COLLECTOR=true
+fi
 
 # Ensure FULL_NAMESPACE is available
 if [ -z "$FULL_NAMESPACE" ]; then
@@ -202,22 +220,31 @@ if [ "$DEV_MODE" != "true" ]; then
     echo "🏗️ Running snapshotter-lite-v2 node Docker image with tag ${IMAGE_TAG}"
     echo "🏗️ Running snapshotter-lite-local-collector Docker image with tag ${LOCAL_COLLECTOR_IMAGE_TAG}"
 else
-    # remove the local collector repository if it exists
-    if [ -d "snapshotter-lite-local-collector" ]; then
-        rm -rf snapshotter-lite-local-collector
-    fi
-    # clone the local collector repository
-    git clone https://github.com/powerloom/snapshotter-lite-local-collector.git snapshotter-lite-local-collector/
-    cd snapshotter-lite-local-collector/
-    # Use feat/dsv-p2p-autorelay-central-seq-off branch for BDS DSV devnet, otherwise dockerify
-    if [ "$DSV_DEVNET" = "true" ]; then
-        git checkout feat/dsv-p2p-autorelay-central-seq-off
-        echo "✅ Local collector repository cloned and checked out to feat/dsv-p2p-autorelay-central-seq-off branch (BDS DSV devnet)"
+    # Only clone local collector repository if NO_COLLECTOR is not set
+    if [ "$NO_COLLECTOR" != "true" ]; then
+        # remove the local collector repository if it exists
+        if [ -d "snapshotter-lite-local-collector" ]; then
+            rm -rf snapshotter-lite-local-collector
+        fi
+        # clone the local collector repository
+        git clone https://github.com/powerloom/snapshotter-lite-local-collector.git snapshotter-lite-local-collector/
+        cd snapshotter-lite-local-collector/
+        # Use experimental branch for BDS DSV devnet/mainnet, otherwise dockerify
+        if [ "$DSV_DEVNET" = "true" ] || [ "$DSV_MAINNET_ALPHA" = "true" ]; then
+            git checkout experimental
+            if [ "$DSV_DEVNET" = "true" ]; then
+                echo "✅ Local collector repository cloned and checked out to experimental branch (BDS DSV devnet)"
+            else
+                echo "✅ Local collector repository cloned and checked out to experimental branch (BDS DSV mainnet alpha)"
+            fi
+        else
+            git checkout dockerify
+            echo "✅ Local collector repository cloned and checked out to dockerify branch"
+        fi
+        cd ../
     else
-        git checkout dockerify
-        echo "✅ Local collector repository cloned and checked out to dockerify branch"
+        echo "🤔 Skipping local collector repository clone (--no-collector flag)"
     fi
-    cd ../
 fi
 
 # Run collector test
@@ -254,6 +281,8 @@ if [ "$DEV_MODE" == "true" ]; then
     DEPLOY_ARGS="--env-file \"$SELECTED_ENV_FILE\" --project-name \"$PROJECT_NAME_LOWER\" --collector-profile \"$COMPOSE_PROFILES\" --dev-mode"
     if [ "$DSV_DEVNET" == "true" ]; then
         DEPLOY_ARGS="$DEPLOY_ARGS --bds-dsv-devnet"
+    elif [ "$DSV_MAINNET_ALPHA" == "true" ]; then
+        DEPLOY_ARGS="$DEPLOY_ARGS --bds-dsv-mainnet-alpha"
     fi
     eval "./deploy-services.sh $DEPLOY_ARGS"
 else
