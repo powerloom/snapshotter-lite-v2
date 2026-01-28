@@ -88,6 +88,17 @@ DEV_MODE=$dev_mode_from_flag
 # Use command-line NO_COLLECTOR if set, otherwise use value from env file
 if [ "$no_collector_from_flag" = "true" ]; then
     NO_COLLECTOR=true
+    # Write NO_COLLECTOR to env file so deploy-services.sh can read it
+    if ! grep -q "^NO_COLLECTOR=" "$SELECTED_ENV_FILE"; then
+        echo "NO_COLLECTOR=true" >> "$SELECTED_ENV_FILE"
+    else
+        # Update existing NO_COLLECTOR value
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            sed -i '' "s|^NO_COLLECTOR=.*|NO_COLLECTOR=true|g" "$SELECTED_ENV_FILE"
+        else
+            sed -i "s|^NO_COLLECTOR=.*|NO_COLLECTOR=true|g" "$SELECTED_ENV_FILE"
+        fi
+    fi
 fi
 
 # Ensure FULL_NAMESPACE is available
@@ -100,8 +111,8 @@ fi
 export FULL_NAMESPACE
 export NO_COLLECTOR
 
-# Generate P2P private key if not present (runs on host system with Docker access)
-if ! grep -q "^[[:space:]]*LOCAL_COLLECTOR_PRIVATE_KEY=" "$SELECTED_ENV_FILE"; then
+# Generate P2P private key if not present and collector is enabled (runs on host system with Docker access)
+if [ "$NO_COLLECTOR" != "true" ] && ! grep -q "^[[:space:]]*LOCAL_COLLECTOR_PRIVATE_KEY=" "$SELECTED_ENV_FILE"; then
     echo ""
     echo "🔑 Generating P2P private key on host system..."
 
@@ -277,10 +288,16 @@ FULL_NAMESPACE_LOWER=$(echo "$FULL_NAMESPACE" | tr '[:upper:]' '[:lower:]')
 export FULL_NAMESPACE_LOWER
 
 COMPOSE_PROFILES="${COLLECTOR_PROFILE_STRING}"
+echo "🔍 Debug: NO_COLLECTOR=$NO_COLLECTOR, COLLECTOR_PROFILE_STRING='$COLLECTOR_PROFILE_STRING', COMPOSE_PROFILES='$COMPOSE_PROFILES'"
 
 # Modify the deploy-services call to use the profiles (setup already ran)
 if [ "$DEV_MODE" == "true" ]; then
-    DEPLOY_ARGS="--env-file \"$SELECTED_ENV_FILE\" --project-name \"$PROJECT_NAME_LOWER\" --collector-profile \"$COMPOSE_PROFILES\" --dev-mode"
+    # Only add --collector-profile if COMPOSE_PROFILES is not empty
+    if [ -n "$COMPOSE_PROFILES" ]; then
+        DEPLOY_ARGS="--env-file \"$SELECTED_ENV_FILE\" --project-name \"$PROJECT_NAME_LOWER\" --collector-profile \"$COMPOSE_PROFILES\" --dev-mode"
+    else
+        DEPLOY_ARGS="--env-file \"$SELECTED_ENV_FILE\" --project-name \"$PROJECT_NAME_LOWER\" --dev-mode"
+    fi
     if [ "$DSV_DEVNET" == "true" ]; then
         DEPLOY_ARGS="$DEPLOY_ARGS --bds-dsv-devnet"
     elif [ "$DSV_MAINNET_ALPHA" == "true" ]; then
@@ -288,9 +305,16 @@ if [ "$DEV_MODE" == "true" ]; then
     fi
     eval "./deploy-services.sh $DEPLOY_ARGS"
 else
-    ./deploy-services.sh --env-file "$SELECTED_ENV_FILE" \
-        --project-name "$PROJECT_NAME_LOWER" \
-        --collector-profile "$COMPOSE_PROFILES" \
-        --image-tag "$IMAGE_TAG"
+    # Only add --collector-profile if COMPOSE_PROFILES is not empty
+    if [ -n "$COMPOSE_PROFILES" ]; then
+        ./deploy-services.sh --env-file "$SELECTED_ENV_FILE" \
+            --project-name "$PROJECT_NAME_LOWER" \
+            --collector-profile "$COMPOSE_PROFILES" \
+            --image-tag "$IMAGE_TAG"
+    else
+        ./deploy-services.sh --env-file "$SELECTED_ENV_FILE" \
+            --project-name "$PROJECT_NAME_LOWER" \
+            --image-tag "$IMAGE_TAG"
+    fi
 fi
 

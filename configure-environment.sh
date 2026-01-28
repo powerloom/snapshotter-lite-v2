@@ -454,6 +454,9 @@ update_common_config() {
     update_or_append_var "DOCKER_NETWORK_NAME" "$DOCKER_NETWORK_NAME" "$env_file"
     update_or_append_var "CONNECTION_REFRESH_INTERVAL_SEC" "$CONNECTION_REFRESH_INTERVAL_SEC" "$env_file"
     update_or_append_var "TELEGRAM_NOTIFICATION_COOLDOWN" "$TELEGRAM_NOTIFICATION_COOLDOWN" "$env_file"
+    
+    # Write NO_COLLECTOR flag to env file so deploy-services.sh can read it
+    update_or_append_var "NO_COLLECTOR" "${NO_COLLECTOR:-false}" "$env_file"
 
     # Set bootstrap node configuration if available
     if [ -n "$BOOTSTRAP_NODE_ADDRS" ]; then

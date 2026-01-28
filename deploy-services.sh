@@ -89,6 +89,8 @@ fi
 dev_mode_from_flag=$DEV_MODE
 source "$ENV_FILE"
 DEV_MODE=$dev_mode_from_flag
+# NO_COLLECTOR should be set from env file (set by configure-environment.sh or build.sh)
+NO_COLLECTOR=${NO_COLLECTOR:-false}
 
 # Validate required variables
 required_vars=("FULL_NAMESPACE" "SLOT_ID" "DOCKER_NETWORK_NAME")
@@ -146,7 +148,12 @@ handle_docker_pull() {
 
     # Add optional profiles
     [ -n "$IPFS_URL" ] && COMPOSE_ARGS+=("--profile" "ipfs")
-    [ -n "$COLLECTOR_PROFILE" ] && COMPOSE_ARGS+=($COLLECTOR_PROFILE)
+    if [ -n "$COLLECTOR_PROFILE" ]; then
+        echo "🔍 Adding collector profile: $COLLECTOR_PROFILE"
+        COMPOSE_ARGS+=($COLLECTOR_PROFILE)
+    else
+        echo "🔍 No collector profile (COLLECTOR_PROFILE is empty or unset)"
+    fi
 
     # Set image tag and ensure network exists
     export IMAGE_TAG
@@ -161,48 +168,53 @@ handle_docker_pull() {
     if [ "$DEV_MODE" = "true" ]; then
         echo "🔧 DEV mode: building images via docker-compose..."
 
-        # Clone local collector repository for BDS DSV devnet/mainnet alpha mode
-        # Note: build.sh already clones this in DEV_MODE, but deploy-services.sh may need to update the branch
-        echo "🔍 Debug: BDS_DSV_DEVNET=$BDS_DSV_DEVNET, BDS_DSV_MAINNET_ALPHA=$BDS_DSV_MAINNET_ALPHA"
-        if [ "$BDS_DSV_DEVNET" = "true" ] || [ "$BDS_DSV_MAINNET_ALPHA" = "true" ]; then
-            if [ "$BDS_DSV_DEVNET" = "true" ]; then
-                echo "🔗 BDS DSV Devnet mode detected - ensuring local collector repository is on experimental branch..."
-            else
-                echo "🔗 BDS DSV Mainnet Alpha mode detected - ensuring local collector repository is on experimental branch..."
-            fi
-            
-            # Use experimental branch for BDS DSV (matching build.sh logic)
-            DSV_BRANCH="experimental"
-            LOCAL_COLLECTOR_REPO_URL="https://github.com/powerloom/snapshotter-lite-local-collector.git"
-            LOCAL_COLLECTOR_DIR="./snapshotter-lite-local-collector"
-
-            if [ ! -d "$LOCAL_COLLECTOR_DIR" ]; then
-                echo "📥 Cloning local collector repository from $LOCAL_COLLECTOR_REPO_URL"
-                git clone "$LOCAL_COLLECTOR_REPO_URL" "$LOCAL_COLLECTOR_DIR"
-                cd "$LOCAL_COLLECTOR_DIR"
-                echo "🌿 Checking out $DSV_BRANCH branch"
-                git checkout "$DSV_BRANCH"
-                cd ../
-                echo "✅ Local collector repository cloned and checked out to $DSV_BRANCH branch"
-            else
-                echo "📁 Local collector directory already exists, ensuring correct branch"
-                cd "$LOCAL_COLLECTOR_DIR"
-                CURRENT_BRANCH=$(git branch --show-current)
-                if [ "$CURRENT_BRANCH" != "$DSV_BRANCH" ]; then
-                    echo "🌿 Switching to $DSV_BRANCH branch"
-                    git checkout "$DSV_BRANCH"
-                else
-                    echo "✅ Already on $DSV_BRANCH branch"
-                fi
-                cd ../
-            fi
+        # Skip collector operations if NO_COLLECTOR is set
+        if [ "$NO_COLLECTOR" = "true" ]; then
+            echo "🤔 Skipping local collector repository operations (NO_COLLECTOR=true)"
         else
-            echo "ℹ️ BDS DSV mode not detected, skipping local collector clone"
-        fi
+            # Clone local collector repository for BDS DSV devnet/mainnet alpha mode
+            # Note: build.sh already clones this in DEV_MODE, but deploy-services.sh may need to update the branch
+            echo "🔍 Debug: BDS_DSV_DEVNET=$BDS_DSV_DEVNET, BDS_DSV_MAINNET_ALPHA=$BDS_DSV_MAINNET_ALPHA"
+            if [ "$BDS_DSV_DEVNET" = "true" ] || [ "$BDS_DSV_MAINNET_ALPHA" = "true" ]; then
+                if [ "$BDS_DSV_DEVNET" = "true" ]; then
+                    echo "🔗 BDS DSV Devnet mode detected - ensuring local collector repository is on experimental branch..."
+                else
+                    echo "🔗 BDS DSV Mainnet Alpha mode detected - ensuring local collector repository is on experimental branch..."
+                fi
+                
+                # Use experimental branch for BDS DSV (matching build.sh logic)
+                DSV_BRANCH="experimental"
+                LOCAL_COLLECTOR_REPO_URL="https://github.com/powerloom/snapshotter-lite-local-collector.git"
+                LOCAL_COLLECTOR_DIR="./snapshotter-lite-local-collector"
 
-        echo "🏗️ Building docker image for snapshotter-lite-local-collector"
-        cd ./snapshotter-lite-local-collector/ && chmod +x build-docker.sh && ./build-docker.sh
-        cd ../
+                if [ ! -d "$LOCAL_COLLECTOR_DIR" ]; then
+                    echo "📥 Cloning local collector repository from $LOCAL_COLLECTOR_REPO_URL"
+                    git clone "$LOCAL_COLLECTOR_REPO_URL" "$LOCAL_COLLECTOR_DIR"
+                    cd "$LOCAL_COLLECTOR_DIR"
+                    echo "🌿 Checking out $DSV_BRANCH branch"
+                    git checkout "$DSV_BRANCH"
+                    cd ../
+                    echo "✅ Local collector repository cloned and checked out to $DSV_BRANCH branch"
+                else
+                    echo "📁 Local collector directory already exists, ensuring correct branch"
+                    cd "$LOCAL_COLLECTOR_DIR"
+                    CURRENT_BRANCH=$(git branch --show-current)
+                    if [ "$CURRENT_BRANCH" != "$DSV_BRANCH" ]; then
+                        echo "🌿 Switching to $DSV_BRANCH branch"
+                        git checkout "$DSV_BRANCH"
+                    else
+                        echo "✅ Already on $DSV_BRANCH branch"
+                    fi
+                    cd ../
+                fi
+            else
+                echo "ℹ️ BDS DSV mode not detected, skipping local collector clone"
+            fi
+
+            echo "🏗️ Building docker image for snapshotter-lite-local-collector"
+            cd ./snapshotter-lite-local-collector/ && chmod +x build-docker.sh && ./build-docker.sh
+            cd ../
+        fi
     else
         # Execute docker compose pull
         echo "🔄 Pulling docker images"
