@@ -462,6 +462,12 @@ update_common_config() {
     if [ -n "$BOOTSTRAP_NODE_ADDRS" ]; then
         update_or_append_var "BOOTSTRAP_NODE_ADDRS" "$BOOTSTRAP_NODE_ADDRS" "$env_file"
     fi
+    
+    # Preserve CENTRALIZED_SEQUENCER_ENABLED from sourced env file if it exists
+    # This ensures values set by deployment.py (e.g., from profile env files) are preserved
+    if [ -n "${CENTRALIZED_SEQUENCER_ENABLED:-}" ]; then
+        update_or_append_var "CENTRALIZED_SEQUENCER_ENABLED" "$CENTRALIZED_SEQUENCER_ENABLED" "$env_file"
+    fi
 }
 
 # Function to handle credential updates
@@ -623,6 +629,16 @@ set_default_optional_variables() {
             echo "⚠️  No bootstrap node configuration found in $env_file"
             echo "   This should have been auto-fetched from curated-datamarkets sources.json"
             echo "   Check that the selected data market has bootstrapNodes configured"
+        fi
+        
+        # Set CENTRALIZED_SEQUENCER_ENABLED to false for BDS mainnet alpha (mesh-only mode)
+        # This preserves any value from deployment.py if set, otherwise defaults to false
+        if ! grep -q "^CENTRALIZED_SEQUENCER_ENABLED=" "$env_file"; then
+            update_or_append_var "CENTRALIZED_SEQUENCER_ENABLED" "false" "$env_file"
+            echo "🔔 CENTRALIZED_SEQUENCER_ENABLED not found in $env_file, setting to false for mesh-only mode"
+        else
+            # Preserve existing value (from deployment.py/profile env)
+            echo "✅ CENTRALIZED_SEQUENCER_ENABLED already configured in $env_file"
         fi
 
         # Remove backup files if they exist
