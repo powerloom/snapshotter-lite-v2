@@ -27,7 +27,7 @@ ENV_FILE=""
 PROJECT_NAME=""
 COLLECTOR_PROFILE=""
 IMAGE_TAG="latest"
-DEV_MODE=""  # Empty by default - will be set from env file or --dev-mode flag
+DEV_MODE="false"
 BDS_DSV_DEVNET="false"
 BDS_DSV_MAINNET_ALPHA="false"
 
@@ -85,17 +85,12 @@ if [ ! -f "$ENV_FILE" ]; then
     exit 1
 fi
 
-# Source and export all variables from env file
-# docker-compose --env-file uses this file for variable substitution in docker-compose.yaml
-# Preserve DEV_MODE from command line flag if explicitly set, otherwise use env file value
-dev_mode_flag=$DEV_MODE
+# Source the environment file, preserving the DEV_MODE flag
+dev_mode_from_flag=$DEV_MODE
 set -a
 source "$ENV_FILE"
 set +a
-# Command line flag takes precedence if explicitly set via --dev-mode
-if [ "$dev_mode_flag" = "true" ]; then
-    DEV_MODE="true"
-fi
+DEV_MODE=$dev_mode_from_flag
 NO_COLLECTOR=${NO_COLLECTOR:-false}
 
 # Validate required variables
@@ -154,12 +149,7 @@ handle_docker_pull() {
 
     # Add optional profiles
     [ -n "$IPFS_URL" ] && COMPOSE_ARGS+=("--profile" "ipfs")
-    if [ -n "$COLLECTOR_PROFILE" ]; then
-        echo "🔍 Adding collector profile: $COLLECTOR_PROFILE"
-        COMPOSE_ARGS+=($COLLECTOR_PROFILE)
-    else
-        echo "🔍 No collector profile (COLLECTOR_PROFILE is empty or unset)"
-    fi
+    [ -n "$COLLECTOR_PROFILE" ] && COMPOSE_ARGS+=($COLLECTOR_PROFILE)
 
     # Set image tag and ensure network exists
     export IMAGE_TAG
@@ -176,20 +166,15 @@ handle_docker_pull() {
 
         # Skip collector operations if NO_COLLECTOR is set
         if [ "$NO_COLLECTOR" = "true" ]; then
-            echo "🤔 Skipping local collector repository operations (NO_COLLECTOR=true)"
+            echo "🤔 Skipping local collector operations (NO_COLLECTOR=true)"
         else
             # Clone local collector repository for BDS DSV devnet/mainnet alpha mode
-            # Note: build.sh already clones this in DEV_MODE, but deploy-services.sh may need to update the branch
-            echo "🔍 Debug: BDS_DSV_DEVNET=$BDS_DSV_DEVNET, BDS_DSV_MAINNET_ALPHA=$BDS_DSV_MAINNET_ALPHA"
             if [ "$BDS_DSV_DEVNET" = "true" ] || [ "$BDS_DSV_MAINNET_ALPHA" = "true" ]; then
                 if [ "$BDS_DSV_DEVNET" = "true" ]; then
-                    echo "🔗 BDS DSV Devnet mode detected - ensuring local collector repository is on experimental branch..."
+                    echo "🔗 BDS DSV Devnet mode detected - cloning local collector repository..."
                 else
-                    echo "🔗 BDS DSV Mainnet Alpha mode detected - ensuring local collector repository is on experimental branch..."
+                    echo "🔗 BDS DSV Mainnet Alpha mode detected - cloning local collector repository..."
                 fi
-                
-                # Use experimental branch for BDS DSV (matching build.sh logic)
-                DSV_BRANCH="experimental"
                 LOCAL_COLLECTOR_REPO_URL="https://github.com/powerloom/snapshotter-lite-local-collector.git"
                 LOCAL_COLLECTOR_DIR="./snapshotter-lite-local-collector"
 
@@ -197,19 +182,17 @@ handle_docker_pull() {
                     echo "📥 Cloning local collector repository from $LOCAL_COLLECTOR_REPO_URL"
                     git clone "$LOCAL_COLLECTOR_REPO_URL" "$LOCAL_COLLECTOR_DIR"
                     cd "$LOCAL_COLLECTOR_DIR"
-                    echo "🌿 Checking out $DSV_BRANCH branch"
-                    git checkout "$DSV_BRANCH"
+                    echo "🌿 Checking out experimental branch"
+                    git checkout experimental
                     cd ../
-                    echo "✅ Local collector repository cloned and checked out to $DSV_BRANCH branch"
+                    echo "✅ Local collector repository cloned and checked out to experimental branch"
                 else
-                    echo "📁 Local collector directory already exists, ensuring correct branch"
+                    echo "📁 Local collector directory already exists, skipping clone"
                     cd "$LOCAL_COLLECTOR_DIR"
                     CURRENT_BRANCH=$(git branch --show-current)
-                    if [ "$CURRENT_BRANCH" != "$DSV_BRANCH" ]; then
-                        echo "🌿 Switching to $DSV_BRANCH branch"
-                        git checkout "$DSV_BRANCH"
-                    else
-                        echo "✅ Already on $DSV_BRANCH branch"
+                    if [ "$CURRENT_BRANCH" != "experimental" ]; then
+                        echo "🌿 Switching to experimental branch"
+                        git checkout experimental
                     fi
                     cd ../
                 fi
@@ -236,6 +219,4 @@ echo "🚀 Deploying with configuration from: $ENV_FILE"
 handle_docker_pull
 
 # Deploy services
-# CRITICAL: Variables from env file are now exported (via set -a) and available to docker-compose
-# docker-compose will use --env-file for interpolation AND shell environment for $VAR syntax
-$DOCKER_COMPOSE_CMD "${COMPOSE_ARGS[@]}" up -V 
+$DOCKER_COMPOSE_CMD "${COMPOSE_ARGS[@]}" up -V
