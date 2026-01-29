@@ -27,7 +27,7 @@ ENV_FILE=""
 PROJECT_NAME=""
 COLLECTOR_PROFILE=""
 IMAGE_TAG="latest"
-DEV_MODE="false"
+DEV_MODE=""  # Empty by default - will be set from env file or --dev-mode flag
 BDS_DSV_DEVNET="false"
 BDS_DSV_MAINNET_ALPHA="false"
 
@@ -85,11 +85,17 @@ if [ ! -f "$ENV_FILE" ]; then
     exit 1
 fi
 
-# Source the environment file, preserving the DEV_MODE flag
-dev_mode_from_flag=$DEV_MODE
+# Source and export all variables from env file
+# docker-compose --env-file uses this file for variable substitution in docker-compose.yaml
+# Preserve DEV_MODE from command line flag if explicitly set, otherwise use env file value
+dev_mode_flag=$DEV_MODE
+set -a
 source "$ENV_FILE"
-DEV_MODE=$dev_mode_from_flag
-# NO_COLLECTOR should be set from env file (set by configure-environment.sh or build.sh)
+set +a
+# Command line flag takes precedence if explicitly set via --dev-mode
+if [ "$dev_mode_flag" = "true" ]; then
+    DEV_MODE="true"
+fi
 NO_COLLECTOR=${NO_COLLECTOR:-false}
 
 # Validate required variables
@@ -230,4 +236,6 @@ echo "🚀 Deploying with configuration from: $ENV_FILE"
 handle_docker_pull
 
 # Deploy services
+# CRITICAL: Variables from env file are now exported (via set -a) and available to docker-compose
+# docker-compose will use --env-file for interpolation AND shell environment for $VAR syntax
 $DOCKER_COMPOSE_CMD "${COMPOSE_ARGS[@]}" up -V 
