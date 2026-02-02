@@ -80,12 +80,13 @@ async def w3_get_and_cache_finalized_cid(
     Returns:
         Tuple[str, int]: The CID and epoch ID if the consensus status is True, or the null value and epoch ID if the consensus status is False.
     """
+
     tasks = [
-        state_contract_obj.functions.snapshotStatus(Web3.to_checksum_address(data_market), project_id, epoch_id),
-        state_contract_obj.functions.maxSnapshotsCid(Web3.to_checksum_address(data_market), project_id, epoch_id),
+        ("snapshotStatus", [Web3.to_checksum_address(data_market), project_id, epoch_id]),
+        ("maxSnapshotsCid", [Web3.to_checksum_address(data_market), project_id, epoch_id]),
     ]
 
-    [consensus_status, cid] = await rpc_helper.web3_call(tasks)
+    [consensus_status, cid] = await rpc_helper.web3_call(tasks, contract_addr=state_contract_obj.address, abi=state_contract_obj.abi)
     logger.trace(f'consensus status for project {project_id} and epoch {epoch_id} is {consensus_status}')
     if consensus_status[0]:
         return cid, epoch_id
@@ -107,10 +108,10 @@ async def get_project_last_finalized_cid_and_epoch(state_contract_obj, data_mark
     """
 
     tasks = [
-        state_contract_obj.functions.lastFinalizedSnapshot(project_id),
+        ("lastFinalizedSnapshot", [project_id]),
     ]
 
-    [last_finalized_epoch] = await rpc_helper.web3_call(tasks)
+    [last_finalized_epoch] = await rpc_helper.web3_call(tasks, contract_addr=state_contract_obj.address, abi=state_contract_obj.abi)
     logger.info(f'last finalized epoch for project {project_id} is {last_finalized_epoch}')
 
     # getting finalized cid for last finalized epoch
@@ -138,10 +139,10 @@ async def get_project_first_epoch(state_contract_obj, data_market, rpc_helper, p
         int: The first epoch for the given project ID.
     """
     tasks = [
-        state_contract_obj.functions.projectFirstEpochId(Web3.to_checksum_address(data_market), project_id),
+        ("projectFirstEpochId", [Web3.to_checksum_address(data_market), project_id]),
     ]
 
-    [first_epoch] = await rpc_helper.web3_call(tasks)
+    [first_epoch] = await rpc_helper.web3_call(tasks, contract_addr=state_contract_obj.address, abi=state_contract_obj.abi)
     logger.info(f'first epoch for project {project_id} is {first_epoch}')
     # Don't cache if it is 0
     if first_epoch == 0:
@@ -236,10 +237,10 @@ async def get_source_chain_id(state_contract_obj, data_market, rpc_helper):
         int: The source chain ID.
     """
     tasks = [
-        state_contract_obj.functions.SOURCE_CHAIN_ID(data_market),
+        ("SOURCE_CHAIN_ID", [data_market]),
     ]
 
-    [source_chain_id] = await rpc_helper.web3_call(tasks)
+    [source_chain_id] = await rpc_helper.web3_call(tasks, contract_addr=state_contract_obj.address, abi=state_contract_obj.abi)
 
     return source_chain_id
 
@@ -256,10 +257,10 @@ async def get_snapshot_submision_window(state_contract_obj, data_market, rpc_hel
         submission_window (int): The snapshot submission window.
     """
     tasks = [
-        state_contract_obj.functions.snapshotSubmissionWindow(data_market),
+        ("snapshotSubmissionWindow", [data_market]),
     ]
 
-    [submission_window] = await rpc_helper.web3_call(tasks)
+    [submission_window] = await rpc_helper.web3_call(tasks, contract_addr=state_contract_obj.address, abi=state_contract_obj.abi)
 
     return submission_window
 
@@ -276,10 +277,10 @@ async def get_source_chain_epoch_size(state_contract_obj, data_market, rpc_helpe
         int: The epoch size of the source chain.
     """
     tasks = [
-        state_contract_obj.functions.EPOCH_SIZE(data_market),
+        ("EPOCH_SIZE", [data_market]),
     ]
 
-    [source_chain_epoch_size] = await rpc_helper.web3_call(tasks)
+    [source_chain_epoch_size] = await rpc_helper.web3_call(tasks, contract_addr=state_contract_obj.address, abi=state_contract_obj.abi)
 
     return source_chain_epoch_size
 
@@ -296,10 +297,10 @@ async def get_source_chain_block_time(state_contract_obj, data_market, rpc_helpe
         int: Block time of the source chain.
     """
     tasks = [
-        state_contract_obj.functions.SOURCE_CHAIN_BLOCK_TIME(data_market),
+        ("SOURCE_CHAIN_BLOCK_TIME", [data_market]),
     ]
 
-    [source_chain_block_time] = await rpc_helper.web3_call(tasks)
+    [source_chain_block_time] = await rpc_helper.web3_call(tasks, contract_addr=state_contract_obj.address, abi=state_contract_obj.abi)
     source_chain_block_time = int(source_chain_block_time / 1e4)
 
     return source_chain_block_time

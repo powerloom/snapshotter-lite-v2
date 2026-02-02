@@ -18,6 +18,7 @@ message SnapshotSubmission {
   string header = 3;
   string dataMarket = 4;
   optional string nodeVersion = 5;
+  string protocolState = 6;
 }
 
 service Submission {

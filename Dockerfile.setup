@@ -11,7 +11,10 @@ RUN apk update && apk add --no-cache \
     coreutils \
     grep \
     sed \
-    gawk
+    gawk \
+    python3 \
+    py3-pip \
+    openssl
 
 # Set working directory
 WORKDIR /app

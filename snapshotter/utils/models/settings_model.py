@@ -3,6 +3,8 @@ from typing import Optional
 
 from ipfs_client.settings.data_models import IPFSConfig
 from pydantic import BaseModel
+from rpc_helper.utils.models.settings_model import RPCConfigBase
+from rpc_helper.utils.models.settings_model import RPCConfigFull
 
 
 class CoreAPI(BaseModel):
@@ -18,20 +20,6 @@ class ConnectionLimits(BaseModel):
     max_connections: int = 100
     max_keepalive_connections: int = 50
     keepalive_expiry: int = 300
-
-
-class RPCConfigBase(BaseModel):
-    full_nodes: List[RPCNodeConfig]
-    archive_nodes: Optional[List[RPCNodeConfig]]
-    force_archive_blocks: Optional[int]
-    retry: int
-    request_time_out: int
-    connection_limits: ConnectionLimits
-
-
-class RPCConfigFull(RPCConfigBase):
-    skip_epoch_threshold_blocks: int
-    polling_interval: int
 
 
 class RLimit(BaseModel):
@@ -92,6 +80,7 @@ class Settings(BaseModel):
     ipfs: IPFSConfig
     powerloom_chain_rpc: RPCConfigBase
     node_version: str
+    only_simulate_submissions: bool = False
 
 
 # Projects related models

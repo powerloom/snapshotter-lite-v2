@@ -25,8 +25,8 @@ from snapshotter.utils.models.data_models import EpochReleasedEvent
 from snapshotter.utils.models.data_models import SnapshotterIssue
 from snapshotter.utils.models.data_models import SnapshotterReportState
 from snapshotter.utils.models.message_models import TelegramEpochProcessingReportMessage
-from snapshotter.utils.rpc import get_event_sig_and_abi
-from snapshotter.utils.rpc import RpcHelper
+from rpc_helper.rpc import get_event_sig_and_abi
+from rpc_helper.rpc import RpcHelper
 from pathlib import Path
 
 
@@ -97,10 +97,11 @@ class EventDetectorProcess(multiprocessing.Process):
         """
         self.rpc_helper = RpcHelper(rpc_settings=settings.powerloom_chain_rpc)
         self._source_rpc_helper = RpcHelper(rpc_settings=settings.rpc)
+        await self.rpc_helper.init()
+        await self._source_rpc_helper.init()
 
         self.processor_distributor = ProcessorDistributor()
 
-        self._logger.info('Initializing SystemEventDetector. Awaiting local collector initialization and bootstrapping for 60 seconds...')
 
         # Load contract ABI from settings
         self.contract_abi = read_json_file(
@@ -150,9 +151,9 @@ class EventDetectorProcess(multiprocessing.Process):
 
         await self.processor_distributor.init()
         # TODO: introduce setting to control simulation snapshot submission if the node has been bootstrapped earlier
-        self._logger.info('Initializing SystemEventDetector. Awaiting local collector initialization and bootstrapping for 60 seconds...')
+        self._logger.info('Initializing SystemEventDetector. Awaiting local collector initialization and DHT bootstrapping for 30 seconds...')
+        await asyncio.sleep(30)
         await self._init_check_and_report()
-        await asyncio.sleep(60)
 
     async def _init_check_and_report(self):
         """
@@ -580,7 +581,7 @@ class EventDetectorProcess(multiprocessing.Process):
                 self._detect_events(),
             )
         except Exception as e:
-            self._logger.error(f"Fatal error in event loop: {e}")
+            self._logger.opt(exception=True).error(f"Fatal error in event loop: {e}")
             os._exit(1)
 
 

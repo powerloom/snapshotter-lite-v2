@@ -1,5 +1,6 @@
 import asyncio
 import sys
+import os
 
 from web3 import Web3
 
@@ -51,13 +52,17 @@ async def main():
     try:
         slot_id_snapshotter_addr = Web3.to_checksum_address(slot_id_mapping_query)
         if slot_id_snapshotter_addr == Web3.to_checksum_address(snapshotter_address):
-            print('Snapshotter identity found in slot ID mapping...')
+            print('✅ Snapshotter identity found in slot ID mapping...')
         else:
-            print('Snapshotter identity not found in slot ID mapping...')
+            print('❌ Snapshotter identity not found in slot ID mapping...')
             sys.exit(1)
     except Exception as e:
         print('Error in slot ID mapping query: ', e)
         sys.exit(1)
+
+
+
+
 
 if __name__ == '__main__':
     asyncio.run(main())

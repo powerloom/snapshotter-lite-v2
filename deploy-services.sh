@@ -10,12 +10,16 @@ show_help() {
     echo "  -c, --collector-profile STR  Set collector profile string"
     echo "  -t, --image-tag TAG         Set docker image tag"
     echo "  -d, --dev-mode              Enable dev mode"
+    echo "  --bds-dsv-devnet            Enable BDS DSV devnet mode"
+    echo "  --bds-dsv-mainnet-alpha     Enable BDS DSV mainnet alpha mode"
     echo "  -h, --help                  Show this help message"
     echo
     echo "Examples:"
     echo "  ./deploy-services.sh --env-file .env-pre-mainnet-AAVEV3-ETH"
     echo "  ./deploy-services.sh --project-name snapshotter-lite-v2-123-aavev3"
     echo "  ./deploy-services.sh --dev-mode"
+    echo "  ./deploy-services.sh --bds-dsv-devnet"
+    echo "  ./deploy-services.sh --bds-dsv-mainnet-alpha"
 }
 
 # Initialize variables
@@ -24,6 +28,8 @@ PROJECT_NAME=""
 COLLECTOR_PROFILE=""
 IMAGE_TAG="latest"
 DEV_MODE="false"
+BDS_DSV_DEVNET="false"
+BDS_DSV_MAINNET_ALPHA="false"
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -46,6 +52,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         -d|--dev-mode)
             DEV_MODE="true"
+            shift
+            ;;
+        --bds-dsv-devnet)
+            BDS_DSV_DEVNET="true"
+            shift
+            ;;
+        --bds-dsv-mainnet-alpha)
+            BDS_DSV_MAINNET_ALPHA="true"
             shift
             ;;
         -h|--help)
@@ -71,8 +85,13 @@ if [ ! -f "$ENV_FILE" ]; then
     exit 1
 fi
 
-# Source the environment file
+# Source the environment file, preserving the DEV_MODE flag
+dev_mode_from_flag=$DEV_MODE
+set -a
 source "$ENV_FILE"
+set +a
+DEV_MODE=$dev_mode_from_flag
+NO_COLLECTOR=${NO_COLLECTOR:-false}
 
 # Validate required variables
 required_vars=("FULL_NAMESPACE" "SLOT_ID" "DOCKER_NETWORK_NAME")
@@ -143,11 +162,48 @@ handle_docker_pull() {
     fi
 
     if [ "$DEV_MODE" = "true" ]; then
-        echo "🏗️ Building docker image for snapshotter-lite-v2"
-        ./build-docker.sh
-        echo "🏗️ Building docker image for snapshotter-lite-local-collector"
-        cd ./snapshotter-lite-local-collector/ && chmod +x build-docker.sh && ./build-docker.sh
-        cd ../
+        echo "🔧 DEV mode: building images via docker-compose..."
+
+        # Skip collector operations if NO_COLLECTOR is set
+        if [ "$NO_COLLECTOR" = "true" ]; then
+            echo "🤔 Skipping local collector operations (NO_COLLECTOR=true)"
+        else
+            # Clone local collector repository for BDS DSV devnet/mainnet alpha mode
+            if [ "$BDS_DSV_DEVNET" = "true" ] || [ "$BDS_DSV_MAINNET_ALPHA" = "true" ]; then
+                if [ "$BDS_DSV_DEVNET" = "true" ]; then
+                    echo "🔗 BDS DSV Devnet mode detected - cloning local collector repository..."
+                else
+                    echo "🔗 BDS DSV Mainnet Alpha mode detected - cloning local collector repository..."
+                fi
+                LOCAL_COLLECTOR_REPO_URL="https://github.com/powerloom/snapshotter-lite-local-collector.git"
+                LOCAL_COLLECTOR_DIR="./snapshotter-lite-local-collector"
+
+                if [ ! -d "$LOCAL_COLLECTOR_DIR" ]; then
+                    echo "📥 Cloning local collector repository from $LOCAL_COLLECTOR_REPO_URL"
+                    git clone "$LOCAL_COLLECTOR_REPO_URL" "$LOCAL_COLLECTOR_DIR"
+                    cd "$LOCAL_COLLECTOR_DIR"
+                    echo "🌿 Checking out experimental branch"
+                    git checkout experimental
+                    cd ../
+                    echo "✅ Local collector repository cloned and checked out to experimental branch"
+                else
+                    echo "📁 Local collector directory already exists, skipping clone"
+                    cd "$LOCAL_COLLECTOR_DIR"
+                    CURRENT_BRANCH=$(git branch --show-current)
+                    if [ "$CURRENT_BRANCH" != "experimental" ]; then
+                        echo "🌿 Switching to experimental branch"
+                        git checkout experimental
+                    fi
+                    cd ../
+                fi
+            else
+                echo "ℹ️ BDS DSV mode not detected, skipping local collector clone"
+            fi
+
+            echo "🏗️ Building docker image for snapshotter-lite-local-collector"
+            cd ./snapshotter-lite-local-collector/ && chmod +x build-docker.sh && ./build-docker.sh
+            cd ../
+        fi
     else
         # Execute docker compose pull
         echo "🔄 Pulling docker images"
@@ -163,4 +219,4 @@ echo "🚀 Deploying with configuration from: $ENV_FILE"
 handle_docker_pull
 
 # Deploy services
-$DOCKER_COMPOSE_CMD "${COMPOSE_ARGS[@]}" up -V 
+$DOCKER_COMPOSE_CMD "${COMPOSE_ARGS[@]}" up -V

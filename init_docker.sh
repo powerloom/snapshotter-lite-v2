@@ -6,7 +6,7 @@ handle_exit() {
     MIN_DELAY=30
     MAX_DELAY=300
     ACTUAL_DELAY=$((MIN_DELAY + RANDOM % (MAX_DELAY - MIN_DELAY + 1)))
-    
+
     echo "Container exited with code $EXIT_CODE. Restarting in $ACTUAL_DELAY seconds..."
     sleep $ACTUAL_DELAY
     exit 1
