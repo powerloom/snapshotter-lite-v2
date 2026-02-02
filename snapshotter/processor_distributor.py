@@ -10,7 +10,6 @@ from web3 import Web3
 from snapshotter.settings.config import projects_config
 from snapshotter.settings.config import settings
 from snapshotter.settings.config import preloaders
-from snapshotter.utils.data_utils import get_snapshot_submision_window
 from snapshotter.utils.data_utils import get_source_chain_epoch_size
 from snapshotter.utils.data_utils import get_source_chain_id
 from snapshotter.utils.default_logger import logger
@@ -174,13 +173,6 @@ class ProcessorDistributor:
                 state_contract_obj=protocol_state_contract,
                 data_market=Web3.to_checksum_address(settings.data_market),
             )
-
-            submission_window = await get_snapshot_submision_window(
-                rpc_helper=self._anchor_rpc_helper,
-                state_contract_obj=protocol_state_contract,
-                data_market=Web3.to_checksum_address(settings.data_market),
-            )
-            self._submission_window = submission_window
 
     async def _epoch_release_processor(self, message: EpochReleasedEvent):
         """
