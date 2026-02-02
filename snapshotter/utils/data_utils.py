@@ -245,26 +245,6 @@ async def get_source_chain_id(state_contract_obj, data_market, rpc_helper):
     return source_chain_id
 
 
-async def get_snapshot_submision_window(state_contract_obj, data_market, rpc_helper):
-    """
-    Get the snapshot submission window from the state contract.
-
-    Args:
-        state_contract_obj: State contract object.
-        rpc_helper: RPC helper object.
-
-    Returns:
-        submission_window (int): The snapshot submission window.
-    """
-    tasks = [
-        ("snapshotSubmissionWindow", [data_market]),
-    ]
-
-    [submission_window] = await rpc_helper.web3_call(tasks, contract_addr=state_contract_obj.address, abi=state_contract_obj.abi)
-
-    return submission_window
-
-
 async def get_source_chain_epoch_size(state_contract_obj, data_market, rpc_helper):
     """
     This function retrieves the epoch size of the source chain from the state contract.

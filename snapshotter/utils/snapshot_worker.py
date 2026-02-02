@@ -14,7 +14,6 @@ from httpx import Timeout
 from snapshotter.settings.config import projects_config
 from snapshotter.settings.config import settings
 from snapshotter.utils.callback_helpers import send_telegram_notification_async
-from snapshotter.utils.data_utils import get_snapshot_submision_window
 from snapshotter.utils.generic_worker import GenericAsyncWorker
 from snapshotter.utils.models.data_models import SnapshotterIssue
 from snapshotter.utils.models.data_models import SnapshotterReportState
@@ -43,7 +42,6 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         for project_config in projects_config:
             task_type = project_config.project_type
             self._task_types.append(task_type)
-        self._submission_window = 0
         self.status = SnapshotterStatus(projects=[])
         self.last_notification_time = 0
         self.notification_cooldown = settings.reporting.notification_cooldown
@@ -167,13 +165,6 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             return
 
         try:
-
-            if not self._submission_window:
-                self._submission_window = await get_snapshot_submision_window(
-                    rpc_helper=self._anchor_rpc_helper,
-                    state_contract_obj=self.protocol_state_contract,
-                    data_market=settings.data_market,
-                )
 
             self.logger.debug(
                 'Got epoch to process for {}: {}',
