@@ -34,11 +34,11 @@ async def get_block_details_in_block_range(
         block_num = int(from_block)
         for block_details in rpc_batch_block_details:
             block_details = block_details.get('result')
-            # right now we are just storing timestamp out of all block details,
-            # edit this if you want to store something else
+            # Store block details including hash for deterministic slot selection
             block_details = {
                 'timestamp': int(block_details.get('timestamp', None), 16),
                 'number': int(block_details.get('number', None), 16),
+                'hash': block_details.get('hash', None),
                 'transactions': block_details.get('transactions', []),
             }
 
