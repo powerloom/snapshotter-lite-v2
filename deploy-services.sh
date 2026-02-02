@@ -122,7 +122,22 @@ handle_docker_pull() {
     while [ -f "$DOCKER_PULL_LOCK" ]; do
         # Check if lock is stale (older than STALE_LOCK_AGE seconds)
         if [ -f "$DOCKER_PULL_LOCK" ]; then
-            local lock_age=$(($(date +%s) - $(stat -f %m "$DOCKER_PULL_LOCK" 2>/dev/null || stat -c %Y "$DOCKER_PULL_LOCK" 2>/dev/null || echo 0)))
+            # Get lock file modification time (cross-platform)
+            local lock_mtime
+            if stat -f %m "$DOCKER_PULL_LOCK" >/dev/null 2>&1; then
+                # macOS/BSD
+                lock_mtime=$(stat -f %m "$DOCKER_PULL_LOCK")
+            elif stat -c %Y "$DOCKER_PULL_LOCK" >/dev/null 2>&1; then
+                # Linux
+                lock_mtime=$(stat -c %Y "$DOCKER_PULL_LOCK")
+            else
+                # Fallback: use find (less precise but works everywhere)
+                lock_mtime=$(date +%s)
+            fi
+            
+            local current_time=$(date +%s)
+            local lock_age=$((current_time - lock_mtime))
+            
             if [ "$lock_age" -gt "$STALE_LOCK_AGE" ]; then
                 echo "⚠️  Removing stale lock (${lock_age}s old)"
                 rm -f "$DOCKER_PULL_LOCK"
