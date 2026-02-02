@@ -11,11 +11,11 @@ services:
       - ${LOCAL_COLLECTOR_HEALTH_CHECK_PORT:-8080}:${LOCAL_COLLECTOR_HEALTH_CHECK_PORT:-8080}
     volumes:
       - ./logs-collector-${FULL_NAMESPACE_LOWER}:/app/logs
-      - ./logs-collector-${FULL_NAMESPACE_LOWER}/archive:/app/logs/archive
     environment:
       - DATA_MARKET_CONTRACT=$DATA_MARKET_CONTRACT
       - LOCAL_COLLECTOR_PORT=$LOCAL_COLLECTOR_PORT
       - LOCAL_COLLECTOR_PRIVATE_KEY=$LOCAL_COLLECTOR_PRIVATE_KEY
+      - LOG_LEVEL=${LOG_LEVEL:-debug}
       - PUBLIC_IP=${PUBLIC_IP}
       - BOOTSTRAP_NODE_ADDRS=${BOOTSTRAP_NODE_ADDRS}
       - LOCAL_COLLECTOR_P2P_PORT=${LOCAL_COLLECTOR_P2P_PORT:-8001}
@@ -53,6 +53,8 @@ services:
       - MESH_PUBLISH_QUEUE_SIZE=${MESH_PUBLISH_QUEUE_SIZE:-1000}
       # Other Configuration
       - DATA_MARKET_IN_REQUEST=${DATA_MARKET_IN_REQUEST:-true}
+      - LIBP2P_LOGGING=${LIBP2P_LOGGING:-info}
+      - LOG_FILE=/app/logs/collector.log
     networks:
       - custom_network
     deploy:

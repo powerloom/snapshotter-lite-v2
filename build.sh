@@ -13,11 +13,11 @@ for arg in "$@"; do
             DEV_MODE=true
             ;;
         --bds-dsv-devnet)
-            DEV_MODE=true
+            # Note: Does not force DEV_MODE - user controls via env or --dev-mode flag
             DSV_DEVNET=true
             ;;
         --bds-dsv-mainnet-alpha)
-            DEV_MODE=true
+            # Note: Does not force DEV_MODE - user controls via env or --dev-mode flag
             DSV_MAINNET_ALPHA=true
             ;;
         --no-collector)
@@ -208,26 +208,35 @@ else
 fi
 
 if [ "$DEV_MODE" != "true" ]; then
-    # Set image tag based on git branch
-    GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-    if [ "$GIT_BRANCH" = "dockerify" ]; then
-        export IMAGE_TAG="dockerify"
-    elif [ "$GIT_BRANCH" = "experimental" ]; then
-        export IMAGE_TAG="experimental"
-    else
-        export IMAGE_TAG="latest"
-    fi
-    if [ -z "$LOCAL_COLLECTOR_IMAGE_TAG" ]; then
-        if [ "$GIT_BRANCH" = "experimental" ] || [ "$GIT_BRANCH" = "dockerify" ]; then
-            # TODO: Change this to use 'experimental' once we have a proper experimental image for local collector
-            export LOCAL_COLLECTOR_IMAGE_TAG="dockerify"
-        else
-            export LOCAL_COLLECTOR_IMAGE_TAG=${IMAGE_TAG}
+    # Set image tag based on DSV mode or git branch
+    
+    # For BDS DSV deployments, use experimental tag (pre-built images with DSV features)
+    if [ "$DSV_DEVNET" = "true" ] || [ "$DSV_MAINNET_ALPHA" = "true" ]; then
+        export IMAGE_TAG="${IMAGE_TAG:-experimental}"
+        if [ -z "$LOCAL_COLLECTOR_IMAGE_TAG" ]; then
+            export LOCAL_COLLECTOR_IMAGE_TAG="experimental"
+            echo "🔔 BDS DSV mode: Using experimental image tags for pre-built images"
         fi
-        echo "🔔 LOCAL_COLLECTOR_IMAGE_TAG not found in .env, setting to default value ${LOCAL_COLLECTOR_IMAGE_TAG}"
     else
+        # Standard deployment: set tag based on git branch
+        GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+        if [ "$GIT_BRANCH" = "dockerify" ]; then
+            export IMAGE_TAG="dockerify"
+        elif [ "$GIT_BRANCH" = "experimental" ]; then
+            export IMAGE_TAG="experimental"
+        else
+            export IMAGE_TAG="latest"
+        fi
+        if [ -z "$LOCAL_COLLECTOR_IMAGE_TAG" ]; then
+            export LOCAL_COLLECTOR_IMAGE_TAG=${IMAGE_TAG}
+            echo "🔔 LOCAL_COLLECTOR_IMAGE_TAG not found in .env, setting to default value ${LOCAL_COLLECTOR_IMAGE_TAG}"
+        fi
+    fi
+    
+    if [ -n "$LOCAL_COLLECTOR_IMAGE_TAG" ] && [ "$DSV_DEVNET" != "true" ] && [ "$DSV_MAINNET_ALPHA" != "true" ]; then
         echo "🔔 LOCAL_COLLECTOR_IMAGE_TAG found in .env, using value ${LOCAL_COLLECTOR_IMAGE_TAG}"
-    fi 
+    fi
+    
     echo "🏗️ Running snapshotter-lite-v2 node Docker image with tag ${IMAGE_TAG}"
     echo "🏗️ Running snapshotter-lite-local-collector Docker image with tag ${LOCAL_COLLECTOR_IMAGE_TAG}"
 else
