@@ -111,11 +111,35 @@ mkdir -p "./logs-${FULL_NAMESPACE_LOWER}"
 
 # Docker pull locking mechanism
 DOCKER_PULL_LOCK="/tmp/powerloom_docker_pull.lock"
+LOCK_TIMEOUT=120  # 2 minutes max wait
+STALE_LOCK_AGE=180  # Lock older than 3 minutes is stale
 
 handle_docker_pull() {
+    # Add random jitter (0-10 seconds) to avoid simultaneous starts
+    sleep $((RANDOM % 10))
+    
+    local wait_time=0
     while [ -f "$DOCKER_PULL_LOCK" ]; do
-        echo "Another Docker pull in progress, waiting..."
+        # Check if lock is stale (older than STALE_LOCK_AGE seconds)
+        if [ -f "$DOCKER_PULL_LOCK" ]; then
+            local lock_age=$(($(date +%s) - $(stat -f %m "$DOCKER_PULL_LOCK" 2>/dev/null || stat -c %Y "$DOCKER_PULL_LOCK" 2>/dev/null || echo 0)))
+            if [ "$lock_age" -gt "$STALE_LOCK_AGE" ]; then
+                echo "⚠️  Removing stale lock (${lock_age}s old)"
+                rm -f "$DOCKER_PULL_LOCK"
+                break
+            fi
+        fi
+        
+        # Check timeout
+        if [ "$wait_time" -ge "$LOCK_TIMEOUT" ]; then
+            echo "❌ Timeout waiting for Docker pull lock (${LOCK_TIMEOUT}s)"
+            echo "   Proceeding anyway - check for conflicts if issues occur"
+            break
+        fi
+        
+        echo "Another Docker pull in progress, waiting... (${wait_time}s/${LOCK_TIMEOUT}s)"
         sleep 5
+        wait_time=$((wait_time + 5))
     done
 
     touch "$DOCKER_PULL_LOCK"
