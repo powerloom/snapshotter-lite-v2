@@ -232,7 +232,6 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             return
 
         epoch_id = msg_obj.epochId
-        processing_failed = False
 
         try:
 
@@ -247,7 +246,6 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 preloader_results=preloader_results,
             )
         except Exception as e:
-            processing_failed = True
             self.logger.error(f"Error processing SnapshotProcessMessage: {msg_obj} for task type: {task_type} - Error: {e}")
             await self.handle_missed_snapshot(
                 error=e,
@@ -256,22 +254,21 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                     task_type=task_type,
                 ),
             )
-        else:
-            # reset consecutive missed snapshots counter
-            self.status.consecutiveMissedSubmissions = 0
-            self.status.totalSuccessfulSubmissions += 1
-        
-        # After processing completes (success or failure), check slot selection status
-        selection_status = self._slot_tracker.get_last_selection()
-        if selection_status and selection_status.get('was_selected') and selection_status.get('epoch_id') == epoch_id:
-            # This slot was selected for this epoch
-            if processing_failed:
-                # Selected but processing failed - track consecutive failures
+            # Check if this was a selected slot that failed
+            selection_status = self._slot_tracker.get_last_selection()
+            if selection_status and selection_status.get('was_selected') and selection_status.get('epoch_id') == epoch_id:
                 await self._handle_selection_failure(epoch_id)
-            else:
-                # Selected and processing succeeded - reset failures
+        else:
+            # Check if slot was actually selected before resetting counter
+            selection_status = self._slot_tracker.get_last_selection()
+            if selection_status and selection_status.get('was_selected') and selection_status.get('epoch_id') == epoch_id:
+                # Slot was selected and processing succeeded
+                self.status.consecutiveMissedSubmissions = 0
+                self.status.totalSuccessfulSubmissions += 1
                 await self._handle_selection_success(epoch_id)
-        # If not selected, don't affect failure tracking
+            else:
+                # Slot was not selected - don't modify counters
+                self.logger.debug(f'Epoch {epoch_id}: Slot not selected, skipping counter reset')
 
     async def _init_project_calculation_mapping(self):
         """
