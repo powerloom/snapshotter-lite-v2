@@ -20,7 +20,6 @@ from snapshotter.utils.models.data_models import SnapshotterReportState
 from snapshotter.utils.models.data_models import SnapshotterStatus
 from snapshotter.utils.models.message_models import SnapshotProcessMessage
 from snapshotter.utils.models.message_models import TelegramSnapshotterReportMessage
-from snapshotter.utils.slot_selection_tracker import SlotSelectionTracker
 
 
 class SnapshotAsyncWorker(GenericAsyncWorker):
@@ -46,68 +45,6 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         self.status = SnapshotterStatus(projects=[])
         self.last_notification_time = 0
         self.notification_cooldown = settings.reporting.notification_cooldown
-        self._slot_tracker = SlotSelectionTracker()
-        self._consecutive_selection_failures = []  # List of epoch_ids where selected but failed
-        self._alert_sent = False
-
-    async def _handle_selection_failure(self, epoch_id: int):
-        """
-        Handle a failure when slot was selected but processing failed.
-        
-        Tracks consecutive failures and sends alert after 3 consecutive selected-but-failed epochs.
-        """
-        self._consecutive_selection_failures.append(epoch_id)
-        
-        # Keep only recent failures for tracking
-        if len(self._consecutive_selection_failures) > 10:
-            self._consecutive_selection_failures = self._consecutive_selection_failures[-10:]
-        
-        self.logger.warning(
-            f"Slot selected for epoch {epoch_id} but processing failed. "
-            f"Consecutive selection failures: {len(self._consecutive_selection_failures)}"
-        )
-        
-        # Alert if 3 consecutive selected epochs failed
-        if len(self._consecutive_selection_failures) >= 3 and not self._alert_sent:
-            error_message = (
-                f"3 consecutive epochs where slot was selected but processing failed: "
-                f"{self._consecutive_selection_failures[-3:]}"
-            )
-            self.logger.error(error_message)
-            
-            # Send telegram notification
-            if settings.reporting.telegram_url and settings.reporting.telegram_chat_id:
-                await send_telegram_notification_async(
-                    client=self._telegram_httpx_client,
-                    message=TelegramSnapshotterReportMessage(
-                        chatId=settings.reporting.telegram_chat_id,
-                        message_thread_id=settings.reporting.telegram_message_thread_id,
-                        slotId=settings.slot_id,
-                        issue=SnapshotterIssue(
-                            instanceID=settings.instance_id,
-                            issueType=SnapshotterReportState.UNHEALTHY_EPOCH_PROCESSING.value,
-                            projectID='',
-                            epochId=str(epoch_id),
-                            timeOfReporting=str(time.time()),
-                            extra=json.dumps({'issueDetails': error_message}),
-                        ),
-                    ),
-                )
-            
-            self._alert_sent = True
-    
-    async def _handle_selection_success(self, epoch_id: int):
-        """
-        Handle successful processing when slot was selected.
-        
-        Resets consecutive failure tracking.
-        """
-        self.logger.info(
-            f"Slot selected for epoch {epoch_id} and processing succeeded. "
-            f"Resetting consecutive failure count (was: {len(self._consecutive_selection_failures)})"
-        )
-        self._consecutive_selection_failures = []
-        self._alert_sent = False
 
     def _gen_project_id(self, task_type: str, data_source: Optional[str] = None, primary_data_source: Optional[str] = None):
         """
@@ -155,22 +92,12 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 ipfs_reader=self._ipfs_reader_client,
                 protocol_state_contract=self.protocol_state_contract,
                 preloader_results=preloader_results,
-                slot_tracker=self._slot_tracker,
             )
 
             if not snapshots:
-                # Check if we were selected - empty return after selection is a failure
-                selection_status = self._slot_tracker.get_last_selection()
-                if selection_status and selection_status.get('was_selected') and selection_status.get('epoch_id') == msg_obj.epochId:
-                    # Selected but compute returned empty - this is a failure
-                    error_msg = f"Slot {selection_status['slot_id']} selected for epoch {msg_obj.epochId} but compute returned no data"
-                    self.logger.error(error_msg)
-                    raise Exception(error_msg)
-                else:
-                    # Not selected - empty return is normal
-                    self.logger.debug(
-                        'No snapshot data for: {}, skipping...', msg_obj,
-                    )
+                self.logger.debug(
+                    'No snapshot data for: {}, skipping...', msg_obj,
+                )
 
         except Exception as e:
             self.logger.opt(exception=True).error(
@@ -180,6 +107,12 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             raise
 
         else:
+
+            if not snapshots:
+                self.logger.debug(
+                    'No snapshot data for: {}, skipping...', msg_obj,
+                )
+                return
 
             for project_data_source, snapshot in snapshots:
                 data_sources = project_data_source.split('_')
@@ -231,9 +164,6 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             )
             return
 
-        epoch_id = msg_obj.epochId
-        processing_failed = False
-
         try:
 
             self.logger.debug(
@@ -247,7 +177,6 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 preloader_results=preloader_results,
             )
         except Exception as e:
-            processing_failed = True
             self.logger.error(f"Error processing SnapshotProcessMessage: {msg_obj} for task type: {task_type} - Error: {e}")
             await self.handle_missed_snapshot(
                 error=e,
@@ -260,18 +189,6 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             # reset consecutive missed snapshots counter
             self.status.consecutiveMissedSubmissions = 0
             self.status.totalSuccessfulSubmissions += 1
-        
-        # After processing completes (success or failure), check slot selection status
-        selection_status = self._slot_tracker.get_last_selection()
-        if selection_status and selection_status.get('was_selected') and selection_status.get('epoch_id') == epoch_id:
-            # This slot was selected for this epoch
-            if processing_failed:
-                # Selected but processing failed - track consecutive failures
-                await self._handle_selection_failure(epoch_id)
-            else:
-                # Selected and processing succeeded - reset failures
-                await self._handle_selection_success(epoch_id)
-        # If not selected, don't affect failure tracking
 
     async def _init_project_calculation_mapping(self):
         """
