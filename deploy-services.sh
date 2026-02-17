@@ -11,7 +11,7 @@ show_help() {
     echo "  -t, --image-tag TAG         Set docker image tag"
     echo "  -d, --dev-mode              Enable dev mode"
     echo "  --bds-dsv-devnet            Enable BDS DSV devnet mode"
-    echo "  --bds-dsv-mainnet-alpha     Enable BDS DSV mainnet alpha mode"
+    echo "  --bds-dsv-mainnet           Enable BDS DSV mainnet mode"
     echo "  -h, --help                  Show this help message"
     echo
     echo "Examples:"
@@ -19,7 +19,7 @@ show_help() {
     echo "  ./deploy-services.sh --project-name snapshotter-lite-v2-123-aavev3"
     echo "  ./deploy-services.sh --dev-mode"
     echo "  ./deploy-services.sh --bds-dsv-devnet"
-    echo "  ./deploy-services.sh --bds-dsv-mainnet-alpha"
+    echo "  ./deploy-services.sh --bds-dsv-mainnet"
 }
 
 # Initialize variables
@@ -29,7 +29,7 @@ COLLECTOR_PROFILE=""
 IMAGE_TAG="latest"
 DEV_MODE="false"
 BDS_DSV_DEVNET="false"
-BDS_DSV_MAINNET_ALPHA="false"
+BDS_DSV_MAINNET="false"
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -58,8 +58,8 @@ while [[ $# -gt 0 ]]; do
             BDS_DSV_DEVNET="true"
             shift
             ;;
-        --bds-dsv-mainnet-alpha)
-            BDS_DSV_MAINNET_ALPHA="true"
+        --bds-dsv-mainnet)
+            BDS_DSV_MAINNET="true"
             shift
             ;;
         -h|--help)
@@ -193,12 +193,12 @@ handle_docker_pull() {
         if [ "$NO_COLLECTOR" = "true" ]; then
             echo "🤔 Skipping local collector operations (NO_COLLECTOR=true)"
         else
-            # Clone local collector repository for BDS DSV devnet/mainnet alpha mode
-            if [ "$BDS_DSV_DEVNET" = "true" ] || [ "$BDS_DSV_MAINNET_ALPHA" = "true" ]; then
+            # Clone local collector repository for BDS DSV devnet/mainnet mode
+            if [ "$BDS_DSV_DEVNET" = "true" ] || [ "$BDS_DSV_MAINNET" = "true" ]; then
                 if [ "$BDS_DSV_DEVNET" = "true" ]; then
                     echo "🔗 BDS DSV Devnet mode detected - cloning local collector repository..."
                 else
-                    echo "🔗 BDS DSV Mainnet Alpha mode detected - cloning local collector repository..."
+                    echo "🔗 BDS DSV Mainnet mode detected - cloning local collector repository..."
                 fi
                 LOCAL_COLLECTOR_REPO_URL="https://github.com/powerloom/snapshotter-lite-local-collector.git"
                 LOCAL_COLLECTOR_DIR="./snapshotter-lite-local-collector"

@@ -89,7 +89,7 @@ parse_arguments() {
             --override) OVERRIDE_DEFAULTS_SCRIPT_FLAG=true; shift ;;
             --devnet) DEVNET_MODE=true; shift ;;
             --bds-dsv-devnet) DEVNET_MODE=true; BDS_DSV_DEVNET=true; shift ;;
-            --bds-dsv-mainnet-alpha) BDS_DSV_MAINNET=true; shift ;;
+            --bds-dsv-mainnet) BDS_DSV_MAINNET=true; shift ;;
             --docker-mode) DOCKER_MODE=true; shift ;;
             --result-file) RESULT_FILE=$2; shift 2 ;;
             *)
@@ -344,13 +344,13 @@ select_market_and_configure() {
         selected_market_name="BDS_DEVNET_ALPHA_UNISWAPV3"
         echo "✅ Selected chain: $selected_chain_name"
         echo "✅ Selected market: $selected_market_name"
-    # Auto-select BDS_MAINNET_ALPHA_UNISWAPV3 when BDS_DSV_MAINNET is enabled
+    # Auto-select BDS_MAINNET_UNISWAPV3 when BDS_DSV_MAINNET is enabled
     elif [ "$BDS_DSV_MAINNET" = "true" ]; then
-        echo "🚀 BDS DSV Mainnet Alpha mode - auto-selecting BDS_MAINNET_ALPHA_UNISWAPV3 market"
+        echo "🚀 BDS DSV Mainnet mode - auto-selecting BDS_MAINNET_UNISWAPV3 market"
         # Use same logic as manual mainnet selection
         local first_mainnet_chain=$(echo "$MARKETS_CONFIG_JSON" | jq -r '.[].powerloomChain.name | select(startswith("mainnet")) | select(. != null)' | head -1)
         selected_chain_name="$first_mainnet_chain"
-        selected_market_name="BDS_MAINNET_ALPHA_UNISWAPV3"
+        selected_market_name="BDS_MAINNET_UNISWAPV3"
         echo "✅ Selected chain: $selected_chain_name"
         echo "✅ Selected market: $selected_market_name"
     elif [ "$is_devnet_mode" = "true" ]; then
@@ -580,33 +580,31 @@ set_default_optional_variables() {
 
     # Add DSV-specific configuration for mainnet BDS mode
     if [ "$BDS_DSV_MAINNET" = "true" ]; then
-        echo "🔧 Applying DSV mainnet alpha specific configuration..."
+        echo "🔧 Applying DSV mainnet BDS specific configuration..."
 
         # Set DSV-specific gossipsub and rendezvous point for mainnet
         if ! grep -q "^GOSSIPSUB_SNAPSHOT_SUBMISSION_PREFIX=" "$env_file"; then
-            update_or_append_var "GOSSIPSUB_SNAPSHOT_SUBMISSION_PREFIX" "/powerloom/dsv-mainnet-alpha/snapshot-submissions" "$env_file"
-            echo "🔔 GOSSIPSUB_SNAPSHOT_SUBMISSION_PREFIX not found in $env_file, setting to DSV mainnet alpha default"
+            update_or_append_var "GOSSIPSUB_SNAPSHOT_SUBMISSION_PREFIX" "/powerloom/dsv-mainnet-bds/snapshot-submissions" "$env_file"
+            echo "🔔 GOSSIPSUB_SNAPSHOT_SUBMISSION_PREFIX not found in $env_file, setting to DSV mainnet default"
         else
-            # Update existing GOSSIPSUB to DSV version for mainnet
-            update_or_append_var "GOSSIPSUB_SNAPSHOT_SUBMISSION_PREFIX" "/powerloom/dsv-mainnet-alpha/snapshot-submissions" "$env_file"
+            update_or_append_var "GOSSIPSUB_SNAPSHOT_SUBMISSION_PREFIX" "/powerloom/dsv-mainnet-bds/snapshot-submissions" "$env_file"
             rm -f "$env_file.bak"
-            echo "🔧 Updated GOSSIPSUB_SNAPSHOT_SUBMISSION_PREFIX for DSV mainnet alpha mode"
+            echo "🔧 Updated GOSSIPSUB_SNAPSHOT_SUBMISSION_PREFIX for DSV mainnet mode"
         fi
 
         if ! grep -q "^RENDEZVOUS_POINT=" "$env_file"; then
-            update_or_append_var "RENDEZVOUS_POINT" "powerloom-dsv-mainnet-alpha" "$env_file"
-            echo "🔔 RENDEZVOUS_POINT not found in $env_file, setting to DSV mainnet alpha default"
+            update_or_append_var "RENDEZVOUS_POINT" "powerloom-dsv-mainnet-bds" "$env_file"
+            echo "🔔 RENDEZVOUS_POINT not found in $env_file, setting to DSV mainnet default"
         else
-            # Update existing RENDEZVOUS_POINT to DSV version for mainnet
-            update_or_append_var "RENDEZVOUS_POINT" "powerloom-dsv-mainnet-alpha" "$env_file"
+            update_or_append_var "RENDEZVOUS_POINT" "powerloom-dsv-mainnet-bds" "$env_file"
             rm -f "$env_file.bak"
-            echo "🔧 Updated RENDEZVOUS_POINT for DSV mainnet alpha mode"
+            echo "🔧 Updated RENDEZVOUS_POINT for DSV mainnet mode"
         fi
 
         # Configure P2P port for DSV mainnet
         if ! grep -q "^LOCAL_COLLECTOR_P2P_PORT=" "$env_file"; then
             update_or_append_var "LOCAL_COLLECTOR_P2P_PORT" "8001" "$env_file"
-            echo "🔔 LOCAL_COLLECTOR_P2P_PORT not found in $env_file, setting to DSV mainnet alpha default (8001)"
+            echo "🔔 LOCAL_COLLECTOR_P2P_PORT not found in $env_file, setting to DSV mainnet default (8001)"
         else
             echo "✅ LOCAL_COLLECTOR_P2P_PORT already configured in $env_file"
         fi
@@ -631,7 +629,7 @@ set_default_optional_variables() {
             echo "   Check that the selected data market has bootstrapNodes configured"
         fi
         
-        # Set CENTRALIZED_SEQUENCER_ENABLED to false for BDS mainnet alpha (mesh-only mode)
+        # Set CENTRALIZED_SEQUENCER_ENABLED to false for BDS mainnet (mesh-only mode)
         # This preserves any value from deployment.py if set, otherwise defaults to false
         if ! grep -q "^CENTRALIZED_SEQUENCER_ENABLED=" "$env_file"; then
             update_or_append_var "CENTRALIZED_SEQUENCER_ENABLED" "false" "$env_file"
@@ -644,7 +642,7 @@ set_default_optional_variables() {
         # Remove backup files if they exist
         rm -f "$env_file.bak"
 
-        echo "🎉 DSV mainnet alpha P2P configuration completed!"
+        echo "🎉 DSV mainnet P2P configuration completed!"
     fi
 }
 

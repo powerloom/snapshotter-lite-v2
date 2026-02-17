@@ -3,7 +3,7 @@
 # Parse arguments to check for dev mode and other flags
 DEV_MODE=false
 DSV_DEVNET=false
-DSV_MAINNET_ALPHA=false
+DSV_MAINNET=false
 NO_COLLECTOR=false
 SETUP_ARGS=""
 
@@ -16,9 +16,9 @@ for arg in "$@"; do
             # Note: Does not force DEV_MODE - user controls via env or --dev-mode flag
             DSV_DEVNET=true
             ;;
-        --bds-dsv-mainnet-alpha)
-            # Note: Does not force DEV_MODE - user controls via env or --dev-mode flag
-            DSV_MAINNET_ALPHA=true
+        --bds-dsv-mainnet)
+            # BDS DSV mainnet (production) - P2P prefix/rendezvous dsv-mainnet-bds
+            DSV_MAINNET=true
             ;;
         --no-collector)
             NO_COLLECTOR=true
@@ -43,9 +43,9 @@ echo "🔧 Running setup container to configure environment..."
 if [ "$DSV_DEVNET" = "true" ]; then
     echo "🚀 BDS DSV Devnet mode enabled"
     SETUP_ARGS="$SETUP_ARGS --bds-dsv-devnet"
-elif [ "$DSV_MAINNET_ALPHA" = "true" ]; then
-    echo "🚀 BDS DSV Mainnet Alpha mode enabled"
-    SETUP_ARGS="$SETUP_ARGS --bds-dsv-mainnet-alpha"
+elif [ "$DSV_MAINNET" = "true" ]; then
+    echo "🚀 BDS DSV Mainnet mode enabled"
+    SETUP_ARGS="$SETUP_ARGS --bds-dsv-mainnet"
 fi
 
 docker run --rm \
@@ -211,7 +211,7 @@ if [ "$DEV_MODE" != "true" ]; then
     # Set image tag based on DSV mode or git branch
     
     # For BDS DSV deployments, use experimental tag (pre-built images with DSV features)
-    if [ "$DSV_DEVNET" = "true" ] || [ "$DSV_MAINNET_ALPHA" = "true" ]; then
+    if [ "$DSV_DEVNET" = "true" ] || [ "$DSV_MAINNET" = "true" ]; then
         export IMAGE_TAG="${IMAGE_TAG:-experimental}"
         if [ -z "$LOCAL_COLLECTOR_IMAGE_TAG" ]; then
             export LOCAL_COLLECTOR_IMAGE_TAG="experimental"
@@ -233,7 +233,7 @@ if [ "$DEV_MODE" != "true" ]; then
         fi
     fi
     
-    if [ -n "$LOCAL_COLLECTOR_IMAGE_TAG" ] && [ "$DSV_DEVNET" != "true" ] && [ "$DSV_MAINNET_ALPHA" != "true" ]; then
+    if [ -n "$LOCAL_COLLECTOR_IMAGE_TAG" ] && [ "$DSV_DEVNET" != "true" ] && [ "$DSV_MAINNET" != "true" ]; then
         echo "🔔 LOCAL_COLLECTOR_IMAGE_TAG found in .env, using value ${LOCAL_COLLECTOR_IMAGE_TAG}"
     fi
     
@@ -254,13 +254,13 @@ else
         git checkout dockerify
         echo "✅ Local collector repository cloned and checked out to dockerify branch"
         
-        # Switch to experimental branch for BDS DSV alpha deployments
-        if [ "$DSV_DEVNET" = "true" ] || [ "$DSV_MAINNET_ALPHA" = "true" ]; then
+        # Switch to experimental branch for BDS DSV devnet/mainnet deployments
+        if [ "$DSV_DEVNET" = "true" ] || [ "$DSV_MAINNET" = "true" ]; then
             git checkout experimental
             if [ "$DSV_DEVNET" = "true" ]; then
                 echo "✅ Switched to experimental branch (BDS DSV devnet)"
             else
-                echo "✅ Switched to experimental branch (BDS DSV mainnet alpha)"
+                echo "✅ Switched to experimental branch (BDS DSV mainnet)"
             fi
         fi
         cd ../
@@ -309,8 +309,8 @@ if [ "$DEV_MODE" == "true" ]; then
     fi
     if [ "$DSV_DEVNET" == "true" ]; then
         DEPLOY_ARGS="$DEPLOY_ARGS --bds-dsv-devnet"
-    elif [ "$DSV_MAINNET_ALPHA" == "true" ]; then
-        DEPLOY_ARGS="$DEPLOY_ARGS --bds-dsv-mainnet-alpha"
+    elif [ "$DSV_MAINNET" == "true" ]; then
+        DEPLOY_ARGS="$DEPLOY_ARGS --bds-dsv-mainnet"
     fi
     eval "./deploy-services.sh $DEPLOY_ARGS"
 else
