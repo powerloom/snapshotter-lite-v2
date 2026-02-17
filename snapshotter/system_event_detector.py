@@ -310,76 +310,58 @@ class EventDetectorProcess(multiprocessing.Process):
 
     async def check_last_submission(self):
         """
-        Monitor and verify the health of snapshot submissions.
+        Safety check to verify node is receiving and attempting to process epochs.
         
-        This method checks when the last successful submission occurred and handles any issues:
-        - Tracks consecutive failures and exits if too many occur
-        - Reads timestamp of last successful submission
-        - Sends notifications if submissions are overdue
-        - Manages cooldown periods between notifications
-        - Updates failure counts and status check timers
+        This is a backup check that runs periodically. The primary health monitoring
+        now happens in snapshot_worker.process_task() on a per-epoch basis.
         
-        The method considers a submission overdue if more than 5 minutes have passed
-        since the last successful submission.
-
-        Raises:
-            SystemExit: If failure count reaches threshold (3)
-            Various exceptions possible during file operations and notifications
+        This check only verifies that slot selection is being checked (any epoch activity),
+        not whether submissions are succeeding (that's handled per-epoch in worker).
         """
         try:
-
             if self.failure_count >= 3:
                 self._logger.error('Too many failures, exiting...')
                 sys.exit(1)
 
-            submission_file = Path('last_successful_submission.txt')
             current_time = int(time.time())
 
             if current_time - self.last_status_check_time < 120:
-                self._logger.info('Waiting for 2 minutes before checking last submission...')
+                self._logger.info('Waiting for 2 minutes before checking epoch activity...')
                 return
             else:
-                self._logger.info('Checking last submission...., current failure count: {}', self.failure_count)
+                self._logger.info('Checking epoch activity...., current failure count: {}', self.failure_count)
 
-            if not submission_file.exists():
-                self.failure_count += 1
-                self.last_status_check_time = current_time
-                return
-            try:
-                async with aiofiles.open(submission_file, mode='r') as f:
-                    content = await f.read()
-                    last_timestamp = int(content.strip())
-            except (ValueError, IOError) as e:
-                self._logger.error('Error reading submission file: {}', e)
-                self.failure_count += 1
-                self.last_status_check_time = current_time
-                return
-
-            # If more than 5 minutes have passed since last submission
-            if current_time - last_timestamp > 300:
-                self._logger.error(
-                    'No successful submission in the last 5 minutes. Last submission: {}',
-                    time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(last_timestamp))
-                )
-                self.failure_count += 1
-                self.last_status_check_time = current_time
-                error_message = f'No successful submission in the last 5 minutes. Last submission: {time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(last_timestamp))}'
-
-                await self._send_telegram_epoch_processing_notification(
-                    error=Exception(error_message)
-                )
-
+            # Read slot selection status to verify node is processing epochs
+            selection_file = Path('slot_selection_status.txt')
+            if selection_file.exists():
+                try:
+                    async with aiofiles.open(selection_file, 'r') as f:
+                        selection_status = json.loads(await f.read())
+                    
+                    last_check_time = selection_status.get('timestamp', 0)
+                    
+                    # If no slot selection check in 10 minutes, node is stuck
+                    if current_time - last_check_time > 600:
+                        error_message = f'No epoch processing activity in 10 minutes. Last check: {time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(last_check_time))}'
+                        self._logger.error(error_message)
+                        await self._send_telegram_epoch_processing_notification(
+                            error=Exception(error_message)
+                        )
+                        self.failure_count += 1
+                    else:
+                        self._logger.info('Epoch processing active. Last check: {}', time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(last_check_time)))
+                        self.failure_count = 0
+                        
+                except Exception as e:
+                    self._logger.error('Error reading selection status: {}', e)
+                    self.failure_count += 1
             else:
-                self._logger.info(
-                    'Last submission was successful within the last 5 minutes. Last submission: {}',
-                    time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(last_timestamp))
-                )
-                self.failure_count = 0
+                self._logger.warning('No slot selection status file found - node may not have processed any epochs yet')
+                
         except Exception as e:
-            self._logger.error('Error checking last submission: {}', e)
+            self._logger.error('Error checking epoch activity: {}', e)
             self.failure_count += 1
-            self.last_status_check_time = int(time.time())
-
+            
         self.last_status_check_time = current_time
 
     async def _detect_events(self):
