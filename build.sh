@@ -210,12 +210,12 @@ fi
 if [ "$DEV_MODE" != "true" ]; then
     # Set image tag based on DSV mode or git branch
     
-    # For BDS DSV deployments, use experimental tag (pre-built images with DSV features)
+    # For BDS DSV deployments, default local collector image tag to master
     if [ "$DSV_DEVNET" = "true" ] || [ "$DSV_MAINNET" = "true" ]; then
         export IMAGE_TAG="${IMAGE_TAG:-experimental}"
         if [ -z "$LOCAL_COLLECTOR_IMAGE_TAG" ]; then
-            export LOCAL_COLLECTOR_IMAGE_TAG="experimental"
-            echo "🔔 BDS DSV mode: Using experimental image tags for pre-built images"
+            export LOCAL_COLLECTOR_IMAGE_TAG="master"
+            echo "🔔 BDS DSV mode: Using master local collector image tag by default"
         fi
     else
         # Standard deployment: set tag based on git branch
@@ -254,13 +254,13 @@ else
         git checkout dockerify
         echo "✅ Local collector repository cloned and checked out to dockerify branch"
         
-        # Switch to experimental branch for BDS DSV devnet/mainnet deployments
+        # Switch to master branch for BDS DSV devnet/mainnet deployments
         if [ "$DSV_DEVNET" = "true" ] || [ "$DSV_MAINNET" = "true" ]; then
-            git checkout experimental
+            git checkout master
             if [ "$DSV_DEVNET" = "true" ]; then
-                echo "✅ Switched to experimental branch (BDS DSV devnet)"
+                echo "✅ Switched to master branch (BDS DSV devnet)"
             else
-                echo "✅ Switched to experimental branch (BDS DSV mainnet)"
+                echo "✅ Switched to master branch (BDS DSV mainnet)"
             fi
         fi
         cd ../
