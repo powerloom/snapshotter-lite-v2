@@ -210,11 +210,11 @@ fi
 if [ "$DEV_MODE" != "true" ]; then
     # Set image tag based on DSV mode or git branch
     
-    # For BDS DSV deployments, force local collector image tag to master
+    # For BDS DSV deployments, force lite node and local collector image tags to master
     if [ "$DSV_DEVNET" = "true" ] || [ "$DSV_MAINNET" = "true" ]; then
-        export IMAGE_TAG="${IMAGE_TAG:-experimental}"
+        export IMAGE_TAG="master"
         export LOCAL_COLLECTOR_IMAGE_TAG="master"
-        echo "🔔 BDS DSV mode: Using master local collector image tag"
+        echo "🔔 BDS DSV mode: Using master image tags for lite node and local collector"
     else
         # Standard deployment: set tag based on git branch
         GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
