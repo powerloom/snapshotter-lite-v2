@@ -251,6 +251,10 @@ class GenericAsyncWorker:
             )
             raise
         else:
+            self.logger.info(
+                '🔍 [Epoch {}] Project {} | CID: {} | Serialized snapshot JSON: {}',
+                epoch.epochId, project_id, snapshot_cid, snapshot_json,
+            )
             # submit to collector
             try:
                 await self._send_submission_to_collector(snapshot_cid, epoch.epochId, project_id)
