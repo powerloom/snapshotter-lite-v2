@@ -1,4 +1,5 @@
 import json
+import os
 
 from snapshotter.utils.models.settings_model import PreloaderConfig
 from snapshotter.utils.models.settings_model import ProjectsConfig
@@ -6,6 +7,14 @@ from snapshotter.utils.models.settings_model import Settings
 
 settings_file = open('config/settings.json', 'r')
 settings_dict = json.load(settings_file)
+
+_reporting = settings_dict.setdefault('reporting', {})
+_missed_batch = os.environ.get('TELEGRAM_MISSED_BATCH_SIZE', '').strip()
+if _missed_batch:
+    try:
+        _reporting['missed_snapshot_batch_size'] = int(_missed_batch)
+    except ValueError:
+        pass
 
 settings: Settings = Settings(**settings_dict)
 

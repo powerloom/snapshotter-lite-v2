@@ -261,12 +261,6 @@ class ProcessorDistributor:
                     project_failed_preloaders
                 )
 
-                await self.snapshot_worker.handle_missed_snapshot(
-                    error=Exception(f'Failed preloaders for {project_type}: {project_failed_preloaders}'),
-                    epoch_id=epoch.epochId,
-                    project_id=project_type
-                )
-
         if failed_preloaders:
             self._logger.warning(
                 'Some preloader tasks failed for epoch {}: {}',
