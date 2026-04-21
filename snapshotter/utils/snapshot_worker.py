@@ -378,21 +378,25 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
     @staticmethod
     def _format_missed_batch_summary(batch: List[Dict[str, Any]], max_error_len: int = 240) -> str:
         """
-        One human-readable block for a single Telegram alert covering all queued misses.
+        One human-readable summary for a single Telegram alert covering all queued misses.
+
+        Uses a single line with || delimiters so JSON/reporting UIs that do not render \\n
+        inside issueDetails still read clearly (no literal \\n in the chat).
         """
         n = len(batch)
-        lines = [f'Missed snapshots — {n} in this alert (summary):']
+        parts = []
         for i, item in enumerate(batch, 1):
             err = item.get('error', '')
             if len(err) > max_error_len:
                 err = err[: max_error_len - 3] + '...'
-            lines.append(
-                f'{i}. epoch={item.get("epochId")} project={item.get("projectId")} — {err}',
+            parts.append(
+                f'({i}) epoch={item.get("epochId")} project={item.get("projectId")} - {err}',
             )
-        text = '\n'.join(lines)
+        body = ' || '.join(parts)
+        text = f'Missed snapshots x{n} (batched): {body}'
         max_total = 3800
         if len(text) > max_total:
-            text = text[: max_total - 20] + '\n… (truncated)'
+            text = text[: max_total - 25] + ' ... (truncated)'
         return text
 
     async def _flush_missed_batch(self):
@@ -427,7 +431,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 projectID=project_display,
                 epochId=str(epoch_display),
                 timeOfReporting=str(time.time()),
-                extra=json.dumps(extra_payload),
+                extra=json.dumps(extra_payload, ensure_ascii=False),
             )
 
             message_thread_id = settings.reporting.telegram_message_thread_id
