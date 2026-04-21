@@ -260,11 +260,15 @@ class ProcessorDistributor:
                     epoch.epochId,
                     project_failed_preloaders
                 )
-
                 await self.snapshot_worker.handle_missed_snapshot(
-                    error=Exception(f'Failed preloaders for {project_type}: {project_failed_preloaders}'),
-                    epoch_id=epoch.epochId,
-                    project_id=project_type
+                    error=Exception(
+                        'Failed preloaders for {}: {}'.format(
+                            project_type,
+                            ', '.join(sorted(project_failed_preloaders)),
+                        ),
+                    ),
+                    epoch_id=str(epoch.epochId),
+                    project_id=project_type,
                 )
 
         if failed_preloaders:
