@@ -38,6 +38,8 @@ class ReportingConfig(BaseModel):
     failure_report_frequency: int
     notification_cooldown: int
     telegram_message_thread_id: Optional[str] = ""
+    # MISSED_SNAPSHOT Telegram is sent only when the pending queue length reaches this count (no time-only flush)
+    missed_snapshot_batch_size: int = 10
 
 
 class Logs(BaseModel):

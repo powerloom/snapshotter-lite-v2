@@ -2,6 +2,11 @@ import importlib
 import json
 import time
 import asyncio
+from collections import defaultdict
+from typing import Any
+from typing import DefaultDict
+from typing import Dict
+from typing import List
 from typing import Optional
 
 from ipfs_client.main import AsyncIPFSClient
@@ -14,6 +19,7 @@ from httpx import Timeout
 from snapshotter.settings.config import projects_config
 from snapshotter.settings.config import settings
 from snapshotter.utils.callback_helpers import send_telegram_notification_async
+from snapshotter.utils.missed_snapshot_batch_format import format_missed_batch_summary
 from snapshotter.utils.generic_worker import GenericAsyncWorker
 from snapshotter.utils.models.data_models import SnapshotterIssue
 from snapshotter.utils.models.data_models import SnapshotterReportState
@@ -44,11 +50,19 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             task_type = project_config.project_type
             self._task_types.append(task_type)
         self.status = SnapshotterStatus(projects=[])
-        self.last_notification_time = 0
         self.notification_cooldown = settings.reporting.notification_cooldown
+        self.missed_batch_size = max(1, settings.reporting.missed_snapshot_batch_size)
         self._slot_tracker = SlotSelectionTracker()
         self._consecutive_selection_failures = []  # List of epoch_ids where selected but failed
         self._alert_sent = False
+        self._pending_missed_alerts: List[Dict[str, Any]] = []
+        self._pending_preloader_misses_by_epoch: DefaultDict[int, List[Dict[str, Any]]] = defaultdict(
+            list,
+        )
+        # Preloader failures per epoch deferred until compute reports slot selection (same epoch, any project).
+        self._missed_batch_flush_task: Optional[asyncio.Task] = None
+        self._missed_batch_lock: Optional[asyncio.Lock] = None
+        self._missed_batch_send_not_before: float = 0.0  # monotonic: backs off Telegram send after HTTP failure
 
     async def _handle_selection_failure(self, epoch_id: int):
         """
@@ -174,8 +188,8 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
 
         except Exception as e:
             self.logger.opt(exception=True).error(
-                'Exception processing callback for epoch: {}, Error: {},'
-                'sending failure notifications', msg_obj, e,
+                'Exception processing callback for epoch: {}, Error: {}',
+                msg_obj, e,
             )
             raise
 
@@ -203,8 +217,9 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                     )
                 except Exception as e:
                     self.logger.opt(exception=True).error(
-                        'Exception committing snapshot payload for epoch: {}, Error: {},'
-                        'sending failure notifications', msg_obj, e,
+                        'Exception committing snapshot payload for epoch: {}, Error: {} '
+                        '(IPFS/upload path)',
+                        msg_obj, e,
                     )
                     raise
 
@@ -247,18 +262,25 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             )
         except Exception as e:
             self.logger.error(f"Error processing SnapshotProcessMessage: {msg_obj} for task type: {task_type} - Error: {e}")
-            await self.handle_missed_snapshot(
-                error=e,
-                epoch_id=str(msg_obj.epochId),
-                project_id=self._gen_project_id(
-                    task_type=task_type,
-                ),
-            )
-            # Check if this was a selected slot that failed
             selection_status = self._slot_tracker.get_last_selection()
             if selection_status and selection_status.get('was_selected') and selection_status.get('epoch_id') == epoch_id:
+                await self.handle_missed_snapshot(
+                    error=e,
+                    epoch_id=str(msg_obj.epochId),
+                    project_id=self._gen_project_id(
+                        task_type=task_type,
+                    ),
+                )
                 await self._handle_selection_failure(epoch_id)
+            else:
+                self.logger.debug(
+                    'Epoch {}: processing error but slot not selected for this epoch (or no selection report); '
+                    'skipping missed-snapshot alert and counters',
+                    epoch_id,
+                )
+            await self._try_reconcile_preloader_missed(epoch_id)
         else:
+            await self._try_reconcile_preloader_missed(epoch_id)
             # Check if slot was actually selected before resetting counter
             selection_status = self._slot_tracker.get_last_selection()
             if selection_status and selection_status.get('was_selected') and selection_status.get('epoch_id') == epoch_id:
@@ -323,64 +345,196 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             await self._init_project_calculation_mapping()
             await self._init_ipfs_client()
             await self._init_telegram_client()
+            if self._missed_batch_lock is None:
+                self._missed_batch_lock = asyncio.Lock()
             await self.init()
+
+    def prune_preloader_misses_older_than(self, min_kept_epoch_id: int) -> None:
+        """Discard deferred preloader-miss entries older than retention window."""
+        stale = [e for e in self._pending_preloader_misses_by_epoch if e < min_kept_epoch_id]
+        for ek in stale:
+            self._pending_preloader_misses_by_epoch.pop(ek, None)
+
+    def defer_preloader_failure_notification(
+        self, epoch_id: int, project_type: str, error: Exception,
+    ) -> None:
+        """
+        Preloaders run before compute(); slot selections are recorded only inside compute().
+        Queue per-epoch deferred rows; reconcile after any project computes for this epoch.
+        """
+        self.logger.warning(
+            'Preloader failure for epoch={} project_type={}: {} — deferring MISSED_SNAPSHOT enqueue until '
+            'another project for this epoch reports slot selection.',
+            epoch_id,
+            project_type,
+            error,
+        )
+        self._pending_preloader_misses_by_epoch[epoch_id].append(
+            {'projectType': project_type, 'error': str(error)},
+        )
+
+    async def _try_reconcile_preloader_missed(self, epoch_id: int) -> None:
+        pending = self._pending_preloader_misses_by_epoch.pop(epoch_id, [])
+        if not pending:
+            return
+        sel = self._slot_tracker.get_last_selection()
+        if not sel:
+            self._pending_preloader_misses_by_epoch[epoch_id] = pending
+            return
+        try:
+            tr_epoch = int(sel['epoch_id'])
+        except (TypeError, ValueError):
+            tr_epoch = -1
+        if tr_epoch != int(epoch_id):
+            self._pending_preloader_misses_by_epoch[epoch_id] = pending
+            return
+        if not sel.get('was_selected'):
+            self.logger.debug(
+                'Skipping deferred preloader MISSED_SNAPSHOT for epoch {} (slot not selected).',
+                epoch_id,
+            )
+            return
+        for row in pending:
+            await self.handle_missed_snapshot(
+                error=Exception(row['error']),
+                epoch_id=str(epoch_id),
+                project_id=str(row['projectType']),
+            )
 
     async def handle_missed_snapshot(self, error: Exception, epoch_id: str, project_id: str):
         """
-        Handles missed snapshots by sending failure notifications and updating the status.
+        Records a missed snapshot for this slot (caller must only invoke when the slot was selected).
+
+        Updates status counters. ``consecutiveMissedSubmissions`` / ``totalMissedSubmissions`` increment
+        only for selected-slot misses (matching process_task semantics). Telegram batch sends only when the
+        pending queue reaches missed_snapshot_batch_size.
         """
         self.logger.error(f"Missed snapshot for epoch: {epoch_id}, project_id: {project_id} - Error: {error}")
         self.status.totalMissedSubmissions += 1
         self.status.consecutiveMissedSubmissions += 1
-        await self._send_failure_notifications(error=error, epoch_id=epoch_id, project_id=project_id)
+        await self._enqueue_missed_snapshot_notification(
+            epoch_id=epoch_id,
+            project_id=project_id,
+            error=error,
+        )
 
-    async def _send_failure_notifications(
+    async def _enqueue_missed_snapshot_notification(
         self,
-        error: Exception,
         epoch_id: str,
         project_id: str,
+        error: Exception,
     ):
-        """
-        Sends failure notifications for missed snapshots.
+        if not (settings.reporting.telegram_url and settings.reporting.telegram_chat_id):
+            return
+        if self._missed_batch_lock is None:
+            raise RuntimeError('SnapshotAsyncWorker.init_worker() must complete before enqueueing Telegram alerts.')
+        async with self._missed_batch_lock:
+            self._pending_missed_alerts.append(
+                {
+                    'epochId': str(epoch_id),
+                    'projectId': project_id,
+                    'error': str(error),
+                },
+            )
+        await self._flush_missed_batch()
 
-        Args:
-            error (Exception): The error that occurred.
-            epoch_id (str): The ID of the epoch that missed the snapshot.
-            project_id (str): The ID of the project that missed the snapshot.
-        """
-        if (int(time.time()) - self.last_notification_time) >= self.notification_cooldown and \
-            (settings.reporting.telegram_url and settings.reporting.telegram_chat_id):
+    async def _flush_missed_batch(self):
+        if self._missed_batch_lock is None:
+            raise RuntimeError('SnapshotAsyncWorker.init_worker() must complete before flushing missed Telegrams.')
+        async with self._missed_batch_lock:
+            now = time.monotonic()
+            if now < self._missed_batch_send_not_before:
+                self.logger.debug(
+                    'Deferring MISSED_SNAPSHOT Telegram send '
+                    '(back-off {:.2f}s remaining)',
+                    self._missed_batch_send_not_before - now,
+                )
+                return
+            if len(self._pending_missed_alerts) < self.missed_batch_size:
+                return
+            batch = self._pending_missed_alerts[:]
+            self._pending_missed_alerts.clear()
 
-            if not self._telegram_httpx_client:
-                self.logger.error('Telegram client not initialized')
+        if not (settings.reporting.telegram_url and settings.reporting.telegram_chat_id):
+            return
+        if not self._telegram_httpx_client:
+            self.logger.error('Telegram client not initialized')
+            return
+
+        try:
+            n = len(batch)
+            summary_text = format_missed_batch_summary(batch)
+            extra_payload = {
+                'issueDetails': summary_text,
+                'batchCount': n,
+            }
+            if n > 1:
+                extra_payload['batchedEpochIds'] = [b.get('epochId') for b in batch]
+                extra_payload['batchedProjectIds'] = [b.get('projectId') for b in batch]
+                extra_payload['batch_detail'] = batch
+            else:
+                extra_payload['batch_detail'] = batch
+
+            epoch_display = str(batch[0]['epochId'])
+            project_display = str(batch[0]['projectId'])
+
+            extra_serial = json.dumps(extra_payload, ensure_ascii=False)
+            max_extra_chars = 2800
+            if len(extra_serial) > max_extra_chars:
+                extra_payload_min = {
+                    'issueDetails': summary_text[:2000] + ('...' if len(summary_text) > 2000 else ''),
+                    'batchCount': n,
+                    'batchEncodedOmitted': True,
+                    'priorEncodedApproxLength': len(extra_serial),
+                }
+                extra_serial = json.dumps(extra_payload_min, ensure_ascii=False)
+
+            notification_message = SnapshotterIssue(
+                instanceID=settings.instance_id,
+                issueType=SnapshotterReportState.MISSED_SNAPSHOT.value,
+                projectID=project_display,
+                epochId=epoch_display,
+                timeOfReporting=str(time.time()),
+                extra=extra_serial,
+            )
+
+            message_thread_id = settings.reporting.telegram_message_thread_id
+
+            telegram_message = TelegramSnapshotterReportMessage(
+                chatId=settings.reporting.telegram_chat_id,
+                slotId=settings.slot_id,
+                message_thread_id=message_thread_id,
+                issue=notification_message,
+                status=self.status,
+            )
+
+            await send_telegram_notification_async(
+                client=self._telegram_httpx_client,
+                message=telegram_message,
+            )
+
+            self._missed_batch_send_not_before = 0.0
+
+        except Exception as e:
+            self.logger.error(f'Error sending batched missed snapshot notifications: {e}')
+            self._missed_batch_send_not_before = time.monotonic() + float(self.notification_cooldown)
+            async with self._missed_batch_lock:
+                self._pending_missed_alerts = batch + self._pending_missed_alerts
+            await self._schedule_missed_batch_retry_flush()
+
+    async def _schedule_missed_batch_retry_flush(self):
+        """Retry send after notification_cooldown seconds (HTTP failure only; not a sub-threshold alert)."""
+        if not (settings.reporting.telegram_url and settings.reporting.telegram_chat_id):
+            return
+        async with self._missed_batch_lock:
+            if self._missed_batch_flush_task and not self._missed_batch_flush_task.done():
                 return
 
-            try:
-                notification_message = SnapshotterIssue(
-                    instanceID=settings.instance_id,
-                    issueType=SnapshotterReportState.MISSED_SNAPSHOT.value,
-                    projectID=project_id,
-                    epochId=str(epoch_id),
-                    timeOfReporting=str(time.time()),
-                    extra=json.dumps({'issueDetails': f'Error : {error}'}),
-                )
+            async def _retry():
+                try:
+                    await asyncio.sleep(self.notification_cooldown)
+                    await self._flush_missed_batch()
+                except asyncio.CancelledError:
+                    raise
 
-                message_thread_id = settings.reporting.telegram_message_thread_id
-
-                telegram_message = TelegramSnapshotterReportMessage(
-                    chatId=settings.reporting.telegram_chat_id,
-                    slotId=settings.slot_id,
-                    message_thread_id=message_thread_id,
-                    issue=notification_message,
-                    status=self.status,
-                )
-
-                await send_telegram_notification_async(
-                    client=self._telegram_httpx_client,
-                    message=telegram_message,
-                )
-
-                self.last_notification_time = int(time.time())
-
-            except Exception as e:
-                self.logger.error(f"Error sending failure notifications: {e}")
+            self._missed_batch_flush_task = asyncio.create_task(_retry())
