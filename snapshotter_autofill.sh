@@ -128,6 +128,7 @@ sed -i'.backup' "s#local-collector-port#$local_collector_port#" config/settings.
 sed -i'.backup' "s#https://telegram-reporting-url#$telegram_reporting_url#" config/settings.json
 sed -i'.backup' "s#telegram-chat-id#$telegram_chat_id#" config/settings.json
 sed -i'.backup' "s#telegram-notification-cooldown#$telegram_notification_cooldown#" config/settings.json
+# Requires config/settings.example.json (from lite-v2 snapshotter-config checkout or image) to expose placeholder `telegram-missed-batch-size`; otherwise sed is a no-op and Pydantic default applies.
 sed -i'.backup' "s#telegram-missed-batch-size#$telegram_missed_batch_size#" config/settings.json
 sed -i'.backup' "s#telegram-message-thread-id#$telegram_message_thread_id#" config/settings.json
 

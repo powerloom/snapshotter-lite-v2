@@ -147,10 +147,12 @@ slot_tracker.report_selection(
 After each epoch's processing in `process_task()`:
 
 1. **Selected + Success**: Reset `consecutiveMissedSubmissions`, increment success counter
-2. **Selected + Failure**: Increment `consecutiveMissedSubmissions`, track in `_consecutive_selection_failures`
+2. **Selected + Failure**: Increment `consecutiveMissedSubmissions`, missed-snapshot Telegram batching when threshold reached (`handle_missed_snapshot`), track selected-but-failed in `_consecutive_selection_failures`
 3. **Not Selected**: No counter modification (critical: avoids false resets)
 
-If 3 consecutive selected-but-failed epochs occur, a Telegram alert is sent.
+Only **selection-related** failures increment `SnapshotterStatus` missed counters (`consecutiveMissedSubmissions`, `totalMissedSubmissions`); retries on precompute/preloader deferrals reconcile after `compute()` reports slot selection for the epoch (see Preloader failures).
+
+If 3 consecutive selected-but-failed epochs occur (compute path only), a dedicated Telegram alert is sent.
 
 ### Safety Net in `system_event_detector.py`
 
@@ -168,6 +170,10 @@ if not snapshots:
 ```
 
 This ensures all selected-but-failed cases follow the exception path consistently.
+
+### Preloader failures (before compute)
+
+Compute (and thus `slot_tracker.report_selection`) only runs after required preloaders succeed for a project. If preloaders fail, the lite node **defers** any MISSED_SNAPSHOT bookkeeping until another project type for that **same epoch** completes compute; only then (`_try_reconcile_preloader_missed`) are alerts enqueued **if** the slot was selected. If **every** project for that epoch skips compute due to preloaders, deferrals expire when old epoch keys fall out of the retention prune (~500 epochs) without alerting unselected workloads.
 
 ## Legacy Comparison: powervigil-mainnet Bulk Snapshotting
 

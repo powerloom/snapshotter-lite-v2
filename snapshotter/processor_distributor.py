@@ -189,6 +189,9 @@ class ProcessorDistributor:
             day=self._current_day,
         )
 
+        prune_before = max(0, int(message.epochId) - 500)
+        self.snapshot_worker.prune_preloader_misses_older_than(prune_before)
+
         if settings.only_simulate_submissions:
             epoch.epochId = 0
 
@@ -260,15 +263,15 @@ class ProcessorDistributor:
                     epoch.epochId,
                     project_failed_preloaders
                 )
-                await self.snapshot_worker.handle_missed_snapshot(
+                await self.snapshot_worker.defer_preloader_failure_notification(
+                    epoch_id=epoch.epochId,
+                    project_type=project_type,
                     error=Exception(
                         'Failed preloaders for {}: {}'.format(
                             project_type,
                             ', '.join(sorted(project_failed_preloaders)),
                         ),
                     ),
-                    epoch_id=str(epoch.epochId),
-                    project_id=project_type,
                 )
 
         if failed_preloaders:
