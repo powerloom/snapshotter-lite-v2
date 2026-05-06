@@ -1,5 +1,6 @@
 import importlib
 import json
+import threading
 import time
 import asyncio
 from collections import defaultdict
@@ -59,6 +60,8 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
         self._pending_preloader_misses_by_epoch: DefaultDict[int, List[Dict[str, Any]]] = defaultdict(
             list,
         )
+        # Protects _pending_preloader_misses_by_epoch (sync defer + async reconcile; never hold across await).
+        self._preloader_misses_lock = threading.Lock()
         # Preloader failures per epoch deferred until compute reports slot selection (same epoch, any project).
         self._missed_batch_flush_task: Optional[asyncio.Task] = None
         self._missed_batch_lock: Optional[asyncio.Lock] = None
@@ -280,8 +283,8 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                 )
             await self._try_reconcile_preloader_missed(epoch_id)
         else:
-            await self._try_reconcile_preloader_missed(epoch_id)
-            # Check if slot was actually selected before resetting counter
+            # Reset success counters before reconcile so deferred preloader misses can increment
+            # consecutiveMissedSubmissions without this epoch's success path zeroing them afterward.
             selection_status = self._slot_tracker.get_last_selection()
             if selection_status and selection_status.get('was_selected') and selection_status.get('epoch_id') == epoch_id:
                 # Slot was selected and processing succeeded
@@ -291,6 +294,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             else:
                 # Slot was not selected - don't modify counters
                 self.logger.debug(f'Epoch {epoch_id}: Slot not selected, skipping counter reset')
+            await self._try_reconcile_preloader_missed(epoch_id)
 
     async def _init_project_calculation_mapping(self):
         """
@@ -351,9 +355,10 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
 
     def prune_preloader_misses_older_than(self, min_kept_epoch_id: int) -> None:
         """Discard deferred preloader-miss entries older than retention window."""
-        stale = [e for e in self._pending_preloader_misses_by_epoch if e < min_kept_epoch_id]
-        for ek in stale:
-            self._pending_preloader_misses_by_epoch.pop(ek, None)
+        with self._preloader_misses_lock:
+            stale = [e for e in self._pending_preloader_misses_by_epoch if e < min_kept_epoch_id]
+            for ek in stale:
+                self._pending_preloader_misses_by_epoch.pop(ek, None)
 
     def defer_preloader_failure_notification(
         self, epoch_id: int, project_type: str, error: Exception,
@@ -369,28 +374,43 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             project_type,
             error,
         )
-        self._pending_preloader_misses_by_epoch[epoch_id].append(
-            {'projectType': project_type, 'error': str(error)},
-        )
+        with self._preloader_misses_lock:
+            self._pending_preloader_misses_by_epoch[epoch_id].append(
+                {'projectType': project_type, 'error': str(error)},
+            )
 
     async def _try_reconcile_preloader_missed(self, epoch_id: int) -> None:
-        pending = self._pending_preloader_misses_by_epoch.pop(epoch_id, [])
+        """
+        Drain deferred preloader-failure rows once slot selection for this epoch is known.
+
+        The queue is keyed by epoch; any project_type finishing can reconcile. Assume all projects share
+        the same selection outcome for ``epoch_id`` via ``SlotSelectionTracker`` (same file row). First
+        finisher with authoritative ``was_selected`` false legitimately drops pending rows for unselected epochs.
+        """
+        with self._preloader_misses_lock:
+            pending = self._pending_preloader_misses_by_epoch.pop(epoch_id, [])
         if not pending:
             return
         sel = self._slot_tracker.get_last_selection()
         if not sel:
-            self._pending_preloader_misses_by_epoch[epoch_id] = pending
+            with self._preloader_misses_lock:
+                cur = self._pending_preloader_misses_by_epoch.pop(epoch_id, [])
+                self._pending_preloader_misses_by_epoch[epoch_id] = pending + cur
             return
         try:
             tr_epoch = int(sel['epoch_id'])
         except (TypeError, ValueError):
             tr_epoch = -1
         if tr_epoch != int(epoch_id):
-            self._pending_preloader_misses_by_epoch[epoch_id] = pending
+            with self._preloader_misses_lock:
+                cur = self._pending_preloader_misses_by_epoch.pop(epoch_id, [])
+                self._pending_preloader_misses_by_epoch[epoch_id] = pending + cur
             return
         if not sel.get('was_selected'):
-            self.logger.debug(
-                'Skipping deferred preloader MISSED_SNAPSHOT for epoch {} (slot not selected).',
+            self.logger.info(
+                'Dropping {} deferred preloader miss row(s) for epoch {} '
+                '(slot not selected; shared tracker epoch_id matches).',
+                len(pending),
                 epoch_id,
             )
             return
@@ -467,13 +487,11 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             extra_payload = {
                 'issueDetails': summary_text,
                 'batchCount': n,
+                'batch_detail': batch,
             }
             if n > 1:
                 extra_payload['batchedEpochIds'] = [b.get('epochId') for b in batch]
                 extra_payload['batchedProjectIds'] = [b.get('projectId') for b in batch]
-                extra_payload['batch_detail'] = batch
-            else:
-                extra_payload['batch_detail'] = batch
 
             epoch_display = str(batch[0]['epochId'])
             project_display = str(batch[0]['projectId'])
@@ -517,6 +535,7 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
 
         except Exception as e:
             self.logger.error(f'Error sending batched missed snapshot notifications: {e}')
+            # Cooldown/backoff applies for HTTP failure only; reassigned outside the enqueue lock below.
             self._missed_batch_send_not_before = time.monotonic() + float(self.notification_cooldown)
             async with self._missed_batch_lock:
                 self._pending_missed_alerts = batch + self._pending_missed_alerts
@@ -535,6 +554,6 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
                     await asyncio.sleep(self.notification_cooldown)
                     await self._flush_missed_batch()
                 except asyncio.CancelledError:
-                    raise
+                    pass
 
             self._missed_batch_flush_task = asyncio.create_task(_retry())
