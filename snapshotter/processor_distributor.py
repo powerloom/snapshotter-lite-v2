@@ -263,7 +263,7 @@ class ProcessorDistributor:
                     epoch.epochId,
                     project_failed_preloaders
                 )
-                await self.snapshot_worker.defer_preloader_failure_notification(
+                self.snapshot_worker.defer_preloader_failure_notification(
                     epoch_id=epoch.epochId,
                     project_type=project_type,
                     error=Exception(
