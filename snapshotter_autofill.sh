@@ -58,6 +58,10 @@ if [ "$TELEGRAM_NOTIFICATION_COOLDOWN" ]; then
     echo "Found TELEGRAM_NOTIFICATION_COOLDOWN ${TELEGRAM_NOTIFICATION_COOLDOWN}";
 fi
 
+if [ "$TELEGRAM_MISSED_BATCH_SIZE" ]; then
+    echo "Found TELEGRAM_MISSED_BATCH_SIZE ${TELEGRAM_MISSED_BATCH_SIZE}";
+fi
+
 if [ "$FULL_NAMESPACE" ]; then
     echo "Found FULL_NAMESPACE ${FULL_NAMESPACE}";
 else
@@ -78,6 +82,7 @@ export telegram_reporting_url="${TELEGRAM_REPORTING_URL:-}"
 export telegram_chat_id="${TELEGRAM_CHAT_ID:-}"
 export telegram_message_thread_id="${TELEGRAM_MESSAGE_THREAD_ID:-}"
 export telegram_notification_cooldown="${TELEGRAM_NOTIFICATION_COOLDOWN:-}"
+export telegram_missed_batch_size="${TELEGRAM_MISSED_BATCH_SIZE:-10}"
 
 # If IPFS_URL is empty, clear IPFS API key and secret
 if [ -z "$IPFS_URL" ]; then
@@ -94,6 +99,7 @@ echo "Using data market contract: ${DATA_MARKET_CONTRACT}"
 echo "Using telegram reporting url: ${telegram_reporting_url}"
 echo "Using telegram chat id: ${telegram_chat_id}"
 echo "Using telegram notification cooldown: ${telegram_notification_cooldown}"
+echo "Using telegram missed batch size: ${telegram_missed_batch_size}"
 
 sed -i'.backup' "s#relevant-namespace#$namespace#" config/settings.json
 
@@ -122,6 +128,8 @@ sed -i'.backup' "s#local-collector-port#$local_collector_port#" config/settings.
 sed -i'.backup' "s#https://telegram-reporting-url#$telegram_reporting_url#" config/settings.json
 sed -i'.backup' "s#telegram-chat-id#$telegram_chat_id#" config/settings.json
 sed -i'.backup' "s#telegram-notification-cooldown#$telegram_notification_cooldown#" config/settings.json
+# Requires config/settings.example.json (from lite-v2 snapshotter-config checkout or image) to expose placeholder `telegram-missed-batch-size`; otherwise sed is a no-op and Pydantic default applies.
+sed -i'.backup' "s#telegram-missed-batch-size#$telegram_missed_batch_size#" config/settings.json
 sed -i'.backup' "s#telegram-message-thread-id#$telegram_message_thread_id#" config/settings.json
 
 echo 'settings has been populated!'

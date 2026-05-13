@@ -12,27 +12,67 @@ handle_exit() {
     exit 1
 }
 
+# Clone a repo at branch (shallow), then optionally detach to an exact commit object.
+# $1: label for logs  $2: destination path  $3: git URL  $4: branch name  $5: optional commit (SHA/tag)
+clone_repo_with_optional_pin() {
+    local label="$1"
+    local dest="$2"
+    local repo_url="$3"
+    local branch="$4"
+    local commit="${5:-}"
+
+    echo "📦 Cloning ${label}..."
+    rm -rf "${dest}"
+    if ! git clone --depth 1 --branch "${branch}" "${repo_url}" "${dest}"; then
+        echo "❌ git clone failed for ${label}"
+        return 1
+    fi
+
+    if [ -z "${commit}" ]; then
+        echo "ℹ️  ${label}: no commit pin (SNAPSHOT_*_COMMIT unset or empty) — using shallow branch tip"
+        return 0
+    fi
+
+    (
+        cd "${dest}" || exit 1
+        if ! git fetch --depth 1 origin "${commit}"; then
+            echo "❌ git fetch failed for ${label} (commit=${commit})"
+            exit 1
+        fi
+        if ! git reset --hard "${commit}"; then
+            echo "❌ git reset --hard failed for ${label} (commit=${commit})"
+            exit 1
+        fi
+    ) || return 1
+
+    echo "✅ ${label} pinned to ${commit}"
+    return 0
+}
+
 # Always run bootstrap
 echo "🚀 Running bootstrap..."
 
-echo "📦 Cloning fresh config repo..."
-git clone --depth 1 --branch $SNAPSHOT_CONFIG_REPO_BRANCH $SNAPSHOT_CONFIG_REPO "/app/config"
-cd /app/config
-git fetch --depth 1 origin $SNAPSHOT_CONFIG_REPO_COMMIT
-git reset --hard $SNAPSHOT_CONFIG_REPO_COMMIT
-cd ..
+clone_repo_with_optional_pin \
+    "config repo" \
+    "/app/config" \
+    "${SNAPSHOT_CONFIG_REPO}" \
+    "${SNAPSHOT_CONFIG_REPO_BRANCH}" \
+    "${SNAPSHOT_CONFIG_REPO_COMMIT:-}" \
+    || {
+        echo "❌ Bootstrap failed (config repo)"
+        exit 1
+    }
 
-echo "📦 Cloning fresh compute repo..."
-git clone --depth 1 --branch $SNAPSHOTTER_COMPUTE_REPO_BRANCH $SNAPSHOTTER_COMPUTE_REPO "/app/computes"
-cd /app/computes
-git fetch --depth 1 origin $SNAPSHOTTER_COMPUTE_REPO_COMMIT
-git reset --hard $SNAPSHOTTER_COMPUTE_REPO_COMMIT
-cd ..
-
-if [ $? -ne 0 ]; then
-    echo "❌ Bootstrap failed"
-    exit 1
-fi
+clone_repo_with_optional_pin \
+    "compute repo" \
+    "/app/computes" \
+    "${SNAPSHOTTER_COMPUTE_REPO}" \
+    "${SNAPSHOTTER_COMPUTE_REPO_BRANCH}" \
+    "${SNAPSHOTTER_COMPUTE_REPO_COMMIT:-}" \
+    || {
+        echo "❌ Bootstrap failed (compute repo)"
+        exit 1
+    }
 
 # Run autofill to setup config files
 bash snapshotter_autofill.sh

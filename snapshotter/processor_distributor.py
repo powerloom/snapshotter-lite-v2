@@ -189,6 +189,9 @@ class ProcessorDistributor:
             day=self._current_day,
         )
 
+        prune_before = max(0, int(message.epochId) - 500)
+        self.snapshot_worker.prune_preloader_misses_older_than(prune_before)
+
         if settings.only_simulate_submissions:
             epoch.epochId = 0
 
@@ -237,11 +240,13 @@ class ProcessorDistributor:
                 failed_preloaders.add(preloader_task)
 
         # Distribute results to each project based on its requirements
+        any_snapshot_task_scheduled = False
         for project_type, project_config in self._project_type_config_mapping.items():
             # Check if all required preloaders for this project succeeded
             project_required_preloaders = set(project_config.preload_tasks)
             project_failed_preloaders = failed_preloaders.intersection(project_required_preloaders)
             if not project_failed_preloaders:
+                any_snapshot_task_scheduled = True
                 project_preloader_results = {
                     task: preloader_results_dict[task]
                     for task in project_required_preloaders
@@ -260,12 +265,23 @@ class ProcessorDistributor:
                     epoch.epochId,
                     project_failed_preloaders
                 )
-
-                await self.snapshot_worker.handle_missed_snapshot(
-                    error=Exception(f'Failed preloaders for {project_type}: {project_failed_preloaders}'),
+                self.snapshot_worker.defer_preloader_failure_notification(
                     epoch_id=epoch.epochId,
-                    project_id=project_type
+                    project_type=project_type,
+                    error=Exception(
+                        'Failed preloaders for {}: {}'.format(
+                            project_type,
+                            ', '.join(sorted(project_failed_preloaders)),
+                        ),
+                    ),
                 )
+
+        # If every project skipped snapshotting (compute never runs), deferred rows are never
+        # reconciled via process_task / slot tracker — flush them into the batched Telegram queue.
+        if failed_preloaders and not any_snapshot_task_scheduled:
+            await self.snapshot_worker.flush_deferred_preloader_failures_to_telegram_batch(
+                epoch.epochId,
+            )
 
         if failed_preloaders:
             self._logger.warning(
