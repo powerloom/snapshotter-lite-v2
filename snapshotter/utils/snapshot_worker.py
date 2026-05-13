@@ -360,6 +360,31 @@ class SnapshotAsyncWorker(GenericAsyncWorker):
             for ek in stale:
                 self._pending_preloader_misses_by_epoch.pop(ek, None)
 
+    async def flush_deferred_preloader_failures_to_telegram_batch(self, epoch_id: int) -> None:
+        """
+        Drain deferred preloader-failure rows when no compute/snapshot task ran for this epoch.
+
+        Slot selection is only reported in compute(); if all projects skip due to preloaders,
+        ``_try_reconcile_preloader_missed`` is never called — operators still need batched TG
+        alerts. This path enqueues Telegram-only rows (no ``handle_missed_snapshot`` counters).
+        """
+        with self._preloader_misses_lock:
+            pending = self._pending_preloader_misses_by_epoch.pop(epoch_id, [])
+        if not pending:
+            return
+        self.logger.warning(
+            'All projects skipped for epoch {} due to preloader failures ({} row(s)); '
+            'enqueueing batched Telegram queue without slot-selection reconcile.',
+            epoch_id,
+            len(pending),
+        )
+        for row in pending:
+            await self._enqueue_missed_snapshot_notification(
+                epoch_id=str(epoch_id),
+                project_id=str(row['projectType']),
+                error=Exception(row['error']),
+            )
+
     def defer_preloader_failure_notification(
         self, epoch_id: int, project_type: str, error: Exception,
     ) -> None:

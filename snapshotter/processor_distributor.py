@@ -240,11 +240,13 @@ class ProcessorDistributor:
                 failed_preloaders.add(preloader_task)
 
         # Distribute results to each project based on its requirements
+        any_snapshot_task_scheduled = False
         for project_type, project_config in self._project_type_config_mapping.items():
             # Check if all required preloaders for this project succeeded
             project_required_preloaders = set(project_config.preload_tasks)
             project_failed_preloaders = failed_preloaders.intersection(project_required_preloaders)
             if not project_failed_preloaders:
+                any_snapshot_task_scheduled = True
                 project_preloader_results = {
                     task: preloader_results_dict[task]
                     for task in project_required_preloaders
@@ -273,6 +275,13 @@ class ProcessorDistributor:
                         ),
                     ),
                 )
+
+        # If every project skipped snapshotting (compute never runs), deferred rows are never
+        # reconciled via process_task / slot tracker — flush them into the batched Telegram queue.
+        if failed_preloaders and not any_snapshot_task_scheduled:
+            await self.snapshot_worker.flush_deferred_preloader_failures_to_telegram_batch(
+                epoch.epochId,
+            )
 
         if failed_preloaders:
             self._logger.warning(
